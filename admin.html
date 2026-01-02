@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Pengurusan RMT | Dashboard Pentadbir Cloud</title>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --primary: #0f172a; --secondary: #334155; --accent: #2563eb;
+            --success: #10b981; --danger: #ef4444; --warning: #f59e0b;
+            --bg: #f8fafc; --white: #ffffff; --border: #e2e8f0;
+        }
+
+        * { box-sizing: border-box; font-family: 'Inter', sans-serif; }
+        body { background-color: var(--bg); color: var(--primary); margin: 0; padding: 0; line-height: 1.5; }
+
+        /* Login Overlay */
+        #login-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(135deg, var(--primary) 0%, #1e293b 100%);
+            display: flex; justify-content: center; align-items: center; z-index: 2000;
+        }
+        .login-card {
+            background: var(--white); padding: 40px; border-radius: 20px;
+            box-shadow: 0 20px 25px rgba(0,0,0,0.2); width: 100%; max-width: 400px; text-align: center;
+        }
+        .login-card input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; }
+
+        /* Top Bar */
+        .top-bar {
+            background: var(--white); border-bottom: 1px solid var(--border); padding: 12px 30px;
+            display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 100;
+        }
+        .brand { display: flex; align-items: center; gap: 12px; }
+        .brand img { height: 40px; }
+        .brand h1 { font-size: 1rem; font-weight: 700; margin: 0; letter-spacing: -0.5px; }
+
+        /* Layout */
+        .main-container { max-width: 1200px; margin: 25px auto; padding: 0 20px; }
+        .nav-tabs { display: flex; gap: 5px; background: #e2e8f0; padding: 5px; border-radius: 12px; margin-bottom: 25px; }
+        .nav-tabs button { flex: 1; padding: 10px; border: none; background: transparent; cursor: pointer; font-weight: 600; color: var(--secondary); border-radius: 8px; transition: 0.2s; }
+        .nav-tabs button.active { background: var(--white); color: var(--accent); box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+
+        /* Cards */
+        .card { background: var(--white); border-radius: 16px; padding: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); border: 1px solid #f1f5f9; margin-bottom: 24px; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #f1f5f9; padding-bottom: 15px; }
+        .card-header h2 { font-size: 1.15rem; margin: 0; font-weight: 700; }
+
+        /* Buttons */
+        .btn { padding: 10px 18px; border-radius: 8px; border: none; font-weight: 600; cursor: pointer; font-size: 0.85rem; display: inline-flex; align-items: center; gap: 8px; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: white; }
+        .btn-success { background: var(--success); color: white; }
+        .btn-danger { background: #fee2e2; color: var(--danger); }
+        .btn-outline { border: 1px solid var(--border); background: white; color: var(--secondary); }
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Tables */
+        .table-container { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; }
+        th { background: #f8fafc; color: var(--secondary); font-size: 0.75rem; text-transform: uppercase; padding: 12px 15px; text-align: left; border-bottom: 2px solid #f1f5f9; }
+        td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
+        
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
+        .badge-green { background: #d1fae5; color: #065f46; }
+        .badge-red { background: #fee2e2; color: #991b1b; }
+
+        .section { display: none; animation: fadeIn 0.3s ease; }
+        .active-section { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        
+        #tempQR { position: absolute; left: -9999px; }
+        .analysis-grid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 24px; }
+        @media (max-width: 768px) { .analysis-grid { grid-template-columns: 1fr; } }
+
+        select { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); outline: none; }
+    </style>
+</head>
+<body>
+
+<div id="tempQR"></div>
+
+<div id="login-overlay">
+    <div class="login-card">
+        <img src="smp.png" alt="Logo" style="height:70px; margin-bottom:15px;">
+        <h2 style="margin-bottom:5px;">Portal Cloud SMP</h2>
+        <p style="color:#64748b; font-size:0.85rem; margin-bottom:20px;">Sila log masuk dengan akaun Firebase</p>
+        <input type="email" id="userEmail" placeholder="Emel Pentadbir">
+        <input type="password" id="userPass" placeholder="Kata Laluan">
+        <button onclick="handleFirebaseLogin()" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;">Log Masuk Cloud</button>
+    </div>
+</div>
+
+<div class="top-bar">
+    <div class="brand">
+        <img src="smp.png" alt="Logo">
+        <h1>SMP <span style="font-weight:400; color:#94a3b8">| Portal Pengurusan Cloud</span></h1>
+    </div>
+    <div style="display:flex; gap:10px;">
+        <button class="btn btn-outline" onclick="backupSistem()">💾 Backup Lokasi</button>
+        <button onclick="handleLogout()" class="btn btn-danger" style="padding: 8px 12px;">Log Keluar</button>
+    </div>
+</div>
+
+<div class="main-container">
+    <div class="nav-tabs">
+        <button onclick="openTab('m-data')" id="tab-data" class="active">👥 Data Murid</button>
+        <button onclick="openTab('m-qr')" id="tab-qr">🖨️ Cetakan QR</button>
+        <button onclick="openTab('m-report')" id="tab-report">📊 Analisis & Log</button>
+    </div>
+
+    <div id="m-data" class="section active-section">
+        <div class="card">
+            <div class="card-header">
+                <h2>Senarai Induk Murid (Cloud Database)</h2>
+                <div style="display:flex; gap:8px;">
+                    <button class="btn btn-outline" onclick="downloadTemplate()">📄 Templat CSV</button>
+                    <button class="btn btn-outline" onclick="naikKelasCloud()">🚀 Naik Kelas</button>
+                    <button class="btn btn-danger" onclick="resetSistemCloud()">🗑️ Reset Cloud</button>
+                </div>
+            </div>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <label style="font-weight:600; font-size:0.85rem;">Tapis Kelas:</label>
+                    <select id="classFilter" onchange="renderStudentsTable()"></select>
+                </div>
+                <div class="btn btn-primary" style="position:relative; overflow:hidden;">
+                    📥 Import Data CSV
+                    <input type="file" accept=".csv" onchange="importCSVToCloud(event)" style="position:absolute; opacity:0; left:0; cursor:pointer; width:100%;">
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Bil</th><th>Nama Penuh</th><th>Kelas</th><th style="text-align:right">Tindakan</th></tr></thead>
+                    <tbody id="studentBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div id="m-qr" class="section">
+        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+            <div class="card">
+                <div class="card-header"><h2>Gantian Individu</h2></div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <label style="font-size:0.85rem;">Pilih Kelas & Nama:</label>
+                    <select id="qrClassSelect" onchange="updateQRNameDropdown()"></select>
+                    <select id="qrNameSelect"><option value="">-- Pilih Nama --</option></select>
+                    <button class="btn btn-primary" style="justify-content:center; margin-top:10px;" onclick="printIndividual()">Jana & Cetak Kad</button>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h2>Cetakan Mengikut Kelas</h2></div>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <label style="font-size:0.85rem;">Pilih Kelas:</label>
+                    <select id="printByClassSelect"></select>
+                    <div style="height:55px;"></div>
+                    <button class="btn btn-success" style="justify-content:center;" onclick="printClass()">Cetak Semua Dalam Kelas</button>
+                </div>
+            </div>
+        </div>
+        <div class="card" style="border-top: 4px solid var(--warning);">
+            <div class="card-header"><h2>Cetakan Pukal (Satu Sekolah)</h2></div>
+            <p style="font-size:0.9rem; color:var(--secondary);">Gunakan fungsi ini hanya untuk persediaan awal tahun atau cetakan besar-besaran.</p>
+            <button class="btn btn-primary" style="background:var(--warning); width:100%; justify-content:center" onclick="printBulk()">Jana Semua QR & Cetak</button>
+        </div>
+    </div>
+
+    <div id="m-report" class="section">
+        <div class="analysis-grid">
+            <div class="card">
+                <div class="card-header"><h2>Ringkasan Kehadiran Hari Ini</h2></div>
+                <div class="table-container">
+                    <table>
+                        <thead><tr><th>Kelas</th><th>Enrolmen</th><th>Hadir</th><th>%</th></tr></thead>
+                        <tbody id="classSummaryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h2>Statistik Keseluruhan</h2></div>
+                <canvas id="attendanceChart" style="max-height: 250px;"></canvas>
+                <div id="chartLegend" style="text-align:center; margin-top:15px; font-size:0.85rem; font-weight:600;"></div>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header">
+                <h2>Log Kehadiran Cloud</h2>
+                <div style="display:flex; gap:10px;">
+                    <select id="yearFilter" onchange="renderReport()"></select>
+                    <button class="btn btn-success" onclick="exportExcel()">📊 Eksport Excel</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Tarikh</th><th>Masa</th><th>Nama Murid</th><th>Kelas</th></tr></thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- KONFIGURASI FIREBASE ANDA ---
+    const firebaseConfig = {
+        apiKey: "AIzaSyDNlFEnA9ZGLFTFCuwMK5ZMzv3D8Ww2BAo",
+        authDomain: "smppro-2845e.firebaseapp.com",
+        projectId: "smppro-2845e",
+        storageBucket: "smppro-2845e.firebasestorage.app",
+        messagingSenderId: "488762363336",
+        appId: "1:488762363336:web:da4ccbb41c1236eaf184fd",
+        measurementId: "G-NZR5BXZKR1"
+    };
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+    const auth = firebase.auth();
+
+    // Variable Global (Data disimpan sementara dari Cloud)
+    let globalStudents = [];
+    let globalLogs = [];
+    let myChart = null;
+
+    // --- 1. FIREBASE AUTHENTICATION ---
+    function handleFirebaseLogin() {
+        const email = document.getElementById('userEmail').value;
+        const pass = document.getElementById('userPass').value;
+        
+        if(!email || !pass) return alert("Sila isi emel dan kata laluan.");
+
+        auth.signInWithEmailAndPassword(email, pass)
+            .then((userCredential) => {
+                document.getElementById('login-overlay').style.display = 'none';
+                startRealtimeSync(); // Mula ambil data secara live
+            })
+            .catch((error) => alert("Ralat Log Masuk: " + error.message));
+    }
+
+    function handleLogout() {
+        auth.signOut().then(() => location.reload());
+    }
+
+    // --- 2. DATA SYNC (LIVE UPDATES) ---
+    function startRealtimeSync() {
+        // Listen to Students Collection
+        db.collection("students").onSnapshot(snapshot => {
+            globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+            syncDropdowns();
+            renderStudentsTable();
+            if(globalLogs.length > 0) renderReport(); // Update report if logs exist
+        });
+
+        // Listen to Logs Collection
+        db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
+            globalLogs = snapshot.docs.map(doc => doc.data());
+            setupYearFilter();
+            renderReport();
+        });
+    }
+
+    // --- 3. DATA MANAGEMENT (CLOUD VERSION) ---
+    async function importCSVToCloud(event) {
+        const file = event.target.files[0];
+        if(!file) return;
+
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            const lines = e.target.result.split('\n').slice(1);
+            const batch = db.batch(); // Gunakan batch untuk kelajuan
+
+            lines.forEach(line => {
+                const parts = line.split(',');
+                if(parts.length >= 2) {
+                    const studentRef = db.collection("students").doc();
+                    batch.set(studentRef, {
+                        name: parts[0].trim().toUpperCase(),
+                        class: parts[1].trim().toUpperCase()
+                    });
+                }
+            });
+
+            await batch.commit();
+            alert("Data berjaya dimuat naik ke Cloud Firestore!");
+        };
+        reader.readAsText(file);
+    }
+
+    async function deleteStudentCloud(docId) {
+        if(confirm("Padam murid ini secara kekal dari Cloud?")) {
+            await db.collection("students").doc(docId).delete();
+        }
+    }
+
+    async function resetSistemCloud() {
+        if(!confirm("AWAS: Padam SEMUA data Cloud?")) return;
+        const confirmText = prompt("Taip 'PADAM SEMUA' untuk sahkan.");
+        if(confirmText !== "PADAM SEMUA") return alert("Tindakan dibatalkan.");
+
+        // Padam Students
+        const students = await db.collection("students").get();
+        const batch = db.batch();
+        students.forEach(doc => batch.delete(doc.ref));
+        
+        // Padam Logs
+        const logs = await db.collection("logs").get();
+        logs.forEach(doc => batch.delete(doc.ref));
+
+        await batch.commit();
+        alert("Pangkalan data Cloud telah dikosongkan.");
+    }
+
+    async function naikKelasCloud() {
+        if(!confirm("Naikkan kelas murid? Murid Tahun 6 akan dipadam secara automatik.")) return;
+        
+        const batch = db.batch();
+        let count = 0;
+
+        globalStudents.forEach(s => {
+            let match = s.class.match(/\d+/);
+            if(match) {
+                let yr = parseInt(match[0]);
+                const docRef = db.collection("students").doc(s.id);
+                if(yr < 6) {
+                    batch.update(docRef, { class: s.class.replace(yr, yr + 1) });
+                } else {
+                    batch.delete(docRef);
+                }
+                count++;
+            }
+        });
+
+        await batch.commit();
+        alert(`Berjaya memproses ${count} murid.`);
+    }
+
+    // --- 4. UI & REPORT LOGIC (AMBIL DARI GLOBAL VARIABLES) ---
+    function syncDropdowns() {
+        const classes = [...new Set(globalStudents.map(s => s.class))].sort();
+        const filters = ['classFilter', 'qrClassSelect', 'printByClassSelect'];
+        
+        filters.forEach(id => {
+            const el = document.getElementById(id);
+            const currentVal = el.value;
+            el.innerHTML = id === 'classFilter' ? '<option value="SEMUA">Semua Kelas</option>' : '<option value="">-- Pilih Kelas --</option>';
+            classes.forEach(c => el.innerHTML += `<option value="${c}">${c}</option>`);
+            el.value = currentVal;
+        });
+    }
+
+    function renderStudentsTable() {
+        const filter = document.getElementById('classFilter').value;
+        let list = globalStudents.sort((a,b) => a.class.localeCompare(b.class));
+        if(filter !== "SEMUA") list = list.filter(s => s.class === filter);
+        
+        document.getElementById('studentBody').innerHTML = list.map((s, i) => 
+            `<tr><td>${i+1}</td><td><b>${s.name}</b></td><td>${s.class}</td><td style="text-align:right">
+            <button class="btn btn-danger" style="padding:4px 8px" onclick="deleteStudentCloud('${s.id}')">×</button></td></tr>`).join('');
+    }
+
+    function renderReport() {
+        const selYear = document.getElementById('yearFilter').value || new Date().getFullYear().toString();
+        const filteredLogs = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
+        const today = new Date().toLocaleDateString('en-GB');
+        const todayLogs = filteredLogs.filter(l => l.date === today);
+        const allClasses = [...new Set(globalStudents.map(s => s.class))].sort();
+
+        // Summary Table
+        document.getElementById('classSummaryBody').innerHTML = allClasses.map(c => {
+            const exp = globalStudents.filter(s => s.class === c).length;
+            const act = todayLogs.filter(l => l.class === c).length;
+            const pct = exp > 0 ? ((act/exp)*100).toFixed(1) : 0;
+            return `<tr><td><b>${c}</b></td><td>${exp}</td><td>${act}</td><td><span class="badge ${pct==100?'badge-green':'badge-red'}">${pct}%</span></td></tr>`;
+        }).join('');
+
+        // Detail Log Table
+        document.getElementById('reportBody').innerHTML = filteredLogs.slice(0, 50).map(l => 
+            `<tr><td>${l.date}</td><td>${l.time}</td><td>${l.name}</td><td>${l.class}</td></tr>`).join('');
+
+        updateChartUI(todayLogs.length, globalStudents.length - todayLogs.length);
+    }
+
+    function setupYearFilter() {
+        let years = [...new Set(globalLogs.map(l => l.date ? l.date.split('/')[2] : null))].filter(y => y);
+        const curY = new Date().getFullYear().toString();
+        if(!years.includes(curY)) years.push(curY);
+        years.sort((a,b) => b-a);
+        const yf = document.getElementById('yearFilter');
+        const current = yf.value;
+        yf.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+        if(current) yf.value = current;
+    }
+
+    // --- 5. PRINTING & OTHERS (LOGIK ASAL DIKEKALKAN) ---
+    function openTab(id) {
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
+        document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
+        document.getElementById(id).classList.add('active-section');
+        document.getElementById('tab-' + id.split('-')[1]).classList.add('active');
+    }
+
+    async function getQRImage(text) {
+        return new Promise((resolve) => {
+            const tempDiv = document.getElementById('tempQR');
+            tempDiv.innerHTML = '';
+            new QRCode(tempDiv, { text: text, width: 128, height: 128 });
+            const check = setInterval(() => {
+                const img = tempDiv.querySelector('img');
+                if (img && img.src.startsWith('data:image')) { clearInterval(check); resolve(img.src); }
+            }, 50);
+        });
+    }
+
+    async function printIndividual() {
+        const name = document.getElementById('qrNameSelect').value;
+        const cls = document.getElementById('qrClassSelect').value;
+        if(!name) return alert("Pilih murid!");
+        const src = await getQRImage(name);
+        const win = window.open('', '', 'width=600,height=600');
+        win.document.write(`<html><body style="display:flex;justify-content:center;align-items:center;height:100vh;margin:0;font-family:sans-serif;"><div style="border:2px solid #000;padding:20px;text-align:center;width:220px;"><img src="${src}" style="width:160px;"><p style="font-weight:bold;text-transform:uppercase;">${name}<br>${cls}</p></div><script>setTimeout(()=>{window.print();window.close();},500);<\/script></body></html>`);
+    }
+
+    async function printClass() {
+        const target = document.getElementById('printByClassSelect').value;
+        if(!target) return alert("Pilih kelas!");
+        const list = globalStudents.filter(s => s.class === target).sort((a,b) => a.name.localeCompare(b.name));
+        const win = window.open('', '', 'width=800,height=1000');
+        win.document.write(`<html><head><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;font-family:sans-serif;} .card{border:1px solid #ccc;padding:10px;text-align:center;page-break-inside:avoid;} img{width:100px;} p{font-size:0.7rem;font-weight:bold;text-transform:uppercase;}</style></head><body><h2 style="text-align:center">KAD RMT: ${target}</h2><div class="grid">`);
+        for(let s of list) {
+            const src = await getQRImage(s.name);
+            win.document.write(`<div class="card"><img src="${src}"><p>${s.name}<br>${s.class}</p></div>`);
+        }
+        win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},800);<\/script></body></html>`);
+    }
+
+    async function printBulk() {
+        if(globalStudents.length === 0) return alert("Tiada data!");
+        const win = window.open('', '', 'width=800,height=1000');
+        win.document.write(`<html><head><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;font-family:sans-serif;} .card{border:1px solid #ccc;padding:10px;text-align:center;page-break-inside:avoid;} img{width:100px;} p{font-size:0.7rem;font-weight:bold;text-transform:uppercase;}</style></head><body><div class="grid">`);
+        for(let s of globalStudents) {
+            const src = await getQRImage(s.name);
+            win.document.write(`<div class="card"><img src="${src}"><p>${s.name}<br>${s.class}</p></div>`);
+        }
+        win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1200);<\/script></body></html>`);
+    }
+
+    function updateChartUI(present, absent) {
+        const ctx = document.getElementById('attendanceChart').getContext('2d');
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Hadir', 'Tidak Hadir'],
+                datasets: [{ data: [present, absent < 0 ? 0 : absent], backgroundColor: ['#10b981', '#e2e8f0'], borderWidth: 0 }]
+            },
+            options: { cutout: '75%', plugins: { legend: { display: false } } }
+        });
+        document.getElementById('chartLegend').innerHTML = `<span style="color:#10b981">● Hadir: ${present}</span> &nbsp;&nbsp; <span style="color:#94a3b8">● Tiada: ${absent<0?0:absent}</span>`;
+    }
+
+    function exportExcel() {
+        const selYear = document.getElementById('yearFilter').value;
+        const filtered = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
+        const ws = XLSX.utils.json_to_sheet(filtered);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Laporan RMT Cloud");
+        XLSX.writeFile(wb, `Laporan_RMT_Cloud_${selYear}.xlsx`);
+    }
+
+    function backupSistem() {
+        const data = { murid: globalStudents, log: globalLogs, backup_at: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `BACKUP_CLOUD_${new Date().getFullYear()}.json`;
+        a.click();
+    }
+
+    function updateQRNameDropdown() {
+        const cls = document.getElementById('qrClassSelect').value;
+        const list = globalStudents.filter(s => s.class === cls).sort((a,b) => a.name.localeCompare(b.name));
+        const ns = document.getElementById('qrNameSelect');
+        ns.innerHTML = '<option value="">-- Pilih Nama --</option>';
+        list.forEach(s => ns.innerHTML += `<option value="${s.name}">${s.name}</option>`);
+    }
+
+    function downloadTemplate() {
+        const csvContent = "data:text/csv;charset=utf-8,NAMA MURID,KELAS\nALI BIN AHMAD,1 CEMERLANG\nSITI BINTI ABU,1 BESTARI";
+        const link = document.createElement("a");
+        link.setAttribute("href", encodeURI(csvContent));
+        link.setAttribute("download", "TEMPLAT_MURID_RMT.csv");
+        link.click();
+    }
+</script>
+</body>
+</html>
