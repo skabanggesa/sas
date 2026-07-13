@@ -483,6 +483,7 @@ async function importCSVToCloud(event) {
             `<tr><td>${l.date}</td><td>${l.time}</td><td>${l.name}</td><td>${l.class}</td></tr>`).join('');
 
         updateChartUI(todayLogs.length, globalStudents.length - todayLogs.length);
+        }
     }
 
     // FUNGSI SENARAI TIDAK HADIR
