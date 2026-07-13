@@ -188,11 +188,36 @@
             </div>
         </div>
         
-        <div class="card">
-            <div class="card-header">
+<div class="card">
+            <div class="card-header" style="flex-wrap: wrap; gap: 15px;">
                 <h2>Log Kehadiran Keseluruhan</h2>
-                <div style="display:flex; gap:10px;">
-                    <select id="yearFilter" onchange="renderReport()"></select>
+                <div style="display:flex; gap:10px; flex-wrap: wrap; align-items: center;">
+                    
+                    <select id="analysisMode" onchange="toggleAnalysisUI()" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-weight: 600;">
+                        <option value="daily">Harian (Hari Ini)</option>
+                        <option value="monthly">Bulanan</option>
+                        <option value="history">Tahunan / Sejarah</option>
+                    </select>
+
+                    <div id="monthFilterContainer" style="display: none;">
+                        <select id="monthFilter" onchange="processAttendanceAnalysis()" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc;">
+                            <option value="01">Januari</option>
+                            <option value="02">Februari</option>
+                            <option value="03">Mac</option>
+                            <option value="04">April</option>
+                            <option value="05">Mei</option>
+                            <option value="06">Jun</option>
+                            <option value="07">Julai</option>
+                            <option value="08">Ogos</option>
+                            <option value="09">September</option>
+                            <option value="10">Oktober</option>
+                            <option value="11">November</option>
+                            <option value="12">Disember</option>
+                        </select>
+                    </div>
+
+                    <select id="yearFilter" onchange="processAttendanceAnalysis()" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc;"></select>
+                    
                     <button class="btn btn-success" onclick="exportExcel()">📊 Eksport Excel</button>
                 </div>
             </div>
@@ -203,7 +228,6 @@
                 </table>
             </div>
         </div>
-    </div>
 
     <div id="m-qr" class="section">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
@@ -305,6 +329,7 @@
             setupYearFilter();
             renderReport();
             renderAbsentList(); // Kemas kini senarai tak hadir secara live
+            processAttendanceAnalysis();
         });
     }
 
@@ -433,20 +458,25 @@ async function importCSVToCloud(event) {
             <button class="btn btn-danger" style="padding:4px 8px" onclick="deleteStudentCloud('${s.id}')">×</button></td></tr>`).join('');
     }
 
-    function renderReport() {
-        const selYear = document.getElementById('yearFilter').value || new Date().getFullYear().toString();
-        const filteredLogs = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
-        const today = new Date().toLocaleDateString('en-GB');
-        const todayLogs = filteredLogs.filter(l => l.date === today);
-        const allClasses = [...new Set(globalStudents.map(s => s.class))].sort();
+// FUNGSI RENDER JADUAL LOG YANG MENERIMA DATA TAPISAN
+    function renderReport(logsToShow) {
+        const reportBody = document.getElementById('reportBody');
+        
+        if(!logsToShow || logsToShow.length === 0) {
+            reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran ditemui untuk tetapan penapis ini.</td></tr>`;
+            return;
+        }
 
-        // Summary Table
-        document.getElementById('classSummaryBody').innerHTML = allClasses.map(c => {
-            const exp = globalStudents.filter(s => s.class === c).length;
-            const act = todayLogs.filter(l => l.class === c).length;
-            const pct = exp > 0 ? ((act/exp)*100).toFixed(1) : 0;
-            return `<tr><td><b>${c}</b></td><td>${exp}</td><td>${act}</td><td><span class="badge ${pct==100?'badge-green':'badge-red'}">${pct}%</span></td></tr>`;
-        }).join('');
+        // Paparkan log masuk ke dalam baris jadual HTML
+        reportBody.innerHTML = logsToShow.map(l => `
+            <tr>
+                <td>${l.date || '-'}</td>
+                <td><span class="badge badge-blue">${l.time || '-'}</span></td>
+                <td><b>${l.name || '-'}</b></td>
+                <td>${l.class || '-'}</td>
+            </tr>
+        `).join('');
+    }
 
         // Detail Log Table
         document.getElementById('reportBody').innerHTML = filteredLogs.slice(0, 50).map(l => 
@@ -825,6 +855,85 @@ function downloadTemplate() {
         link.setAttribute("href", encodeURI(csvContent));
         link.setAttribute("download", "TEMPLAT_MURID_KEHADIRAN.csv");
         link.click();
+    }
+
+    // 1. FUNGSI UNTUK MENUNJUKKAN/MENYEMBUNYIKAN COPMONENT BULAN
+    function toggleAnalysisUI() {
+        const mode = document.getElementById('analysisMode').value;
+        const monthContainer = document.getElementById('monthFilterContainer');
+        
+        if (mode === 'monthly') {
+            monthContainer.style.display = 'block';
+            // Set laluan automatik ke bulan semasa jika mahu
+            const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
+            document.getElementById('monthFilter').value = currentMonth;
+        } else {
+            monthContainer.style.display = 'none';
+        }
+        
+        // Jalankan pengiraan analisis baharu
+        processAttendanceAnalysis();
+    }
+
+    // 2. FUNGSI UTAMA MENGIRA DATA HADIR & TIADA HADIR
+function processAttendanceAnalysis() {
+        const mode = document.getElementById('analysisMode').value;
+        const selectedYear = document.getElementById('yearFilter').value;
+        const selectedMonth = document.getElementById('monthFilter').value;
+        const today = new Date().toLocaleDateString('en-GB'); // Format: DD/MM/YYYY
+
+        let filteredLogs = [];
+        let totalExpected = globalStudents.length; // Jumlah keseluruhan murid (242)
+
+        if (mode === 'daily') {
+            // Harian: Ambil log hari ini sahaja
+            filteredLogs = globalLogs.filter(l => l.date === today);
+            
+            const presentCount = filteredLogs.length;
+            const absentCount = totalExpected - presentCount;
+            
+            // Kemas kini UI Carta Doughnut anda yang kita buat tadi
+            updateChartUI(presentCount, absentCount);
+
+        } else if (mode === 'monthly') {
+            // Bulanan: Ambil log yang padan dengan Bulan & Tahun dipilih
+            filteredLogs = globalLogs.filter(l => {
+                if(!l.date) return false;
+                const parts = l.date.split('/'); // [DD, MM, YYYY]
+                return parts[1] === selectedMonth && parts[2] === selectedYear;
+            });
+
+            // Cari bilangan unik hari persekolahan yang ada rekod dalam bulan tersebut
+            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
+            
+            // Formula jangkaan jumlah kehadiran keseluruhan bulan tersebut
+            const totalExpectedMonthly = totalExpected * (uniqueDays || 1); 
+            const presentCount = filteredLogs.length;
+            const absentCount = totalExpectedMonthly - presentCount;
+
+            updateChartUI(presentCount, absentCount);
+
+        } else if (mode === 'history') {
+            // Sejarah/Tahunan: Ambil semua log pada tahun yang dipilih
+            filteredLogs = globalLogs.filter(l => l.date && l.date.split('/')[2] === selectedYear);
+
+            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
+            const totalExpectedHistory = totalExpected * (uniqueDays || 1);
+            const presentCount = filteredLogs.length;
+            const absentCount = totalExpectedHistory - presentCount;
+
+            updateChartUI(presentCount, absentCount);
+        }
+
+        // 🔥 BAHAGIAN BARU: MENYUSUN DATA & MENGEMAS KINI JADUAL LOG LOG KESELURUHAN
+        // Susun log mengikut tarikh terkini (descending) dan masa imbasan
+        const sortedLogs = filteredLogs.sort((a, b) => {
+            if(a.date !== b.date) return b.date.localeCompare(a.date);
+            return b.time.localeCompare(a.time);
+        });
+        
+        // Hantar data yang telah ditapis ke jadual HTML reportBody
+        renderReport(sortedLogs);
     }
 </script>
 </body>
