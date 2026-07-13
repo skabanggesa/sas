@@ -70,7 +70,7 @@
         th { background: #f8fafc; color: var(--secondary); font-size: 0.75rem; text-transform: uppercase; padding: 12px 15px; text-align: left; border-bottom: 2px solid #f1f5f9; }
         td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
         
-        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7 your; font-weight: 700; }
         .badge-green { background: #d1fae5; color: #065f46; }
         .badge-red { background: #fee2e2; color: #991b1b; }
 
@@ -91,7 +91,7 @@
 
 <div id="login-overlay">
     <div class="login-card">
-        <img src="sas.png" alt="Logo" style="height:70px; margin-bottom:15px;" onerror="this.style.display='none'">
+        <img src="smp.png" alt="Logo" style="height:70px; margin-bottom:15px;" onerror="this.style.display='none'">
         <h2 style="margin-bottom:5px;">Sistem Kehadiran Murid</h2>
         <p style="color:#64748b; font-size:0.85rem; margin-bottom:20px;">Sila log masuk (Pentadbir)</p>
         <input type="email" id="userEmail" placeholder="Emel Pentadbir">
@@ -102,7 +102,7 @@
 
 <div class="top-bar">
     <div class="brand">
-        <img src="sas.png" alt="Logo" onerror="this.style.display='none'">
+        <img src="smp.png" alt="Logo" onerror="this.style.display='none'">
         <h1>SMP Pro <span style="font-weight:400; color:#94a3b8">| Sistem Pengurusan Kehadiran Sekolah</span></h1>
     </div>
     <div style="display:flex; gap:10px;">
@@ -266,29 +266,55 @@
         });
     }
 
-    // --- 3. DATA MANAGEMENT (CLOUD VERSION) ---
+    // --- 3. DATA MANAGEMENT (CLOUD VERSION - DIKEMASKINI) ---
     async function importCSVToCloud(event) {
         const file = event.target.files[0];
         if(!file) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const lines = e.target.result.split('\n').slice(1);
-            const batch = db.batch(); 
+            const lines = e.target.result.split('\n').slice(1); // Buang header CSV
+            
+            let batch = db.batch(); 
+            let counter = 0;
+            let totalImported = 0;
 
-            lines.forEach(line => {
+            for (let line of lines) {
                 const parts = line.split(',');
                 if(parts.length >= 2) {
-                    const studentRef = db.collection("students").doc();
-                    batch.set(studentRef, {
-                        name: parts[0].trim().toUpperCase(),
-                        class: parts[1].trim().toUpperCase()
-                    });
-                }
-            });
+                    const name = parts[0].trim().toUpperCase();
+                    const className = parts[1].trim().toUpperCase();
 
-            await batch.commit();
-            alert("Data berjaya dimuat naik ke Cloud Firestore!");
+                    if (!name || !className) continue;
+
+                    // Bina ID dokumen unik daripada nama (buang simbol/jarak khas)
+                    // Mengelakkan duplikat jika fail dimuat naik semula
+                    const customDocId = name.replace(/[^A-Z0-9]/g, "_");
+                    const studentRef = db.collection("students").doc(customDocId);
+                    
+                    batch.set(studentRef, {
+                        name: name,
+                        class: className
+                    });
+
+                    counter++;
+                    totalImported++;
+
+                    // Had batch Firestore = 500. Commit setiap 400 rekod demi keselamatan.
+                    if (counter === 400) {
+                        await batch.commit();
+                        batch = db.batch();
+                        counter = 0;
+                    }
+                }
+            }
+
+            // Commit baki data yang tertinggal
+            if (counter > 0) {
+                await batch.commit();
+            }
+
+            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud Firestore tanpa sebarang duplikat.`);
         };
         reader.readAsText(file);
     }
