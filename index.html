@@ -13,28 +13,35 @@
         .status-box { margin: 20px; padding: 20px; border-radius: 15px; font-size: 1.2rem; font-weight: bold; min-height: 80px; }
         .success { background: #10b981; color: white; animation: pulse 0.5s; }
         .error { background: #ef4444; color: white; }
+        .warning { background: #f59e0b; color: white; } /* Gaya untuk imbasan duplikat */
         .waiting { background: #334155; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        .header { padding: 20px; background: #1e293b; margin-bottom: 20px; border-bottom: 1px solid #334155; }
+        .header { padding: 20px; background: #1e293b; margin-bottom: 0px; border-bottom: 1px solid #334155; }
+        /* Banner untuk mengaktifkan suara pada browser */
+        .audio-banner { background: #3b82f6; padding: 12px; color: white; font-weight: bold; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #1d4ed8; }
     </style>
 </head>
 <body>
+
+<div id="audio-banner" class="audio-banner" onclick="unlockAudio()">
+    🔊 KLIK DI SINI SEKALI SEBELUM MULA UNTUK AKTIFKAN BUNYI BEEP SCANNER
+</div>
 
 <div class="header">
     <h2 style="margin:0;">SISTEM KEHADIRAN MURID</h2>
     <p style="margin:5px 0 0; opacity:0.7; font-size:0.8rem;">Sesi Perekodan Kehadiran Sekolah (Real-Time)</p>
 </div>
 
-<div id="reader"></div>
+<div id="reader" style="margin-top: 20px;"></div>
 
 <div id="status" class="status-box waiting">
     Sedia untuk imbasan QR kehadiran...
 </div>
 
-<audio id="beep" src="https://www.soundjay.com/button/beep-07.wav"></audio>
+<audio id="beep" src="https://www.soundjay.com/button/beep-07.wav" preload="auto"></audio>
 
 <script>
-    // Konfigurasi Firebase anda kekal sama
+    // Konfigurasi Firebase 
     const firebaseConfig = {
         apiKey: "AIzaSyDNlFEnA9ZGLFTFCuwMK5ZMzv3D8Ww2BAo",
         authDomain: "smppro-2845e.firebaseapp.com",
@@ -50,18 +57,30 @@
     let lastScanned = "";
     let isProcessing = false;
 
-async function onScanSuccess(decodedText) {
+    // Fungsi Khas: Membuka sekatan audio pada peranti/browser
+    function unlockAudio() {
+        const beep = document.getElementById('beep');
+        beep.play().then(() => {
+            beep.pause();
+            beep.currentTime = 0;
+            document.getElementById('audio-banner').style.display = 'none'; // Sorok banner selepas diaktifkan
+        }).catch(err => {
+            console.error("Gagal mengaktifkan audio:", err);
+        });
+    }
+
+    async function onScanSuccess(decodedText) {
         if (isProcessing || decodedText === lastScanned) return;
         
         isProcessing = true;
-        const scannedText = decodedText.trim().toUpperCase(); // Bersihkan teks QR
+        const scannedText = decodedText.trim().toUpperCase(); 
         const statusDiv = document.getElementById('status');
         
         try {
             let studentData = null;
             let studentId = "";
 
-            // LANGKAH 1: Cuba cari jika teks QR ialah ID/IC Murid (ID Dokumen)
+            // LANGKAH 1: Cuba cari jika teks QR ialah ID/IC Murid
             const docRef = db.collection("students").doc(scannedText);
             const docSnap = await docRef.get();
             
@@ -69,29 +88,51 @@ async function onScanSuccess(decodedText) {
                 studentData = docSnap.data();
                 studentId = scannedText;
             } else {
-                // LANGKAH 2: Jika tak jumpa, cuba cari jika teks QR ialah NAMA MURID
+                // LANGKAH 2: Cuba cari jika teks QR ialah NAMA MURID
                 const q = await db.collection("students").where("name", "==", scannedText).get();
                 if (!q.empty) {
                     studentData = q.docs[0].data();
-                    studentId = studentData.id; // Ambil ID unik murid dari database
+                    studentId = studentData.id || q.docs[0].id;
                 }
             }
             
-            // JIKA MURID DIJUMPAI (Sama ada melalui ID atau Nama)
+            // JIKA MURID DIJUMPAI
             if (studentData) {
-                // Bunyi Beep Kehadiran
+                const hariIni = new Date().toLocaleDateString('en-GB'); // Format tarikh semasa: DD/MM/YYYY
+
+                // KEMAS KINI 2: Semak rekod sama ada murid telah melakukan scan pada hari ini
+                const logSemak = await db.collection("logs")
+                    .where("id", "==", studentId)
+                    .where("date", "==", hariIni)
+                    .get();
+
+                if (!logSemak.empty) {
+                    statusDiv.innerHTML = `⚠️ SUDAH HADIR!<br>${studentData.name}<br>Kehadiran murid ini telah direkodkan hari ini.`;
+                    statusDiv.className = "status-box warning";
+                    lastScanned = decodedText;
+                    
+                    setTimeout(() => { 
+                        statusDiv.className = "status-box waiting"; 
+                        statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
+                        isProcessing = false;
+                        lastScanned = "";
+                    }, 3000);
+                    return; // Menyekat log baharu daripada disimpan semula
+                }
+
+                // Mainkan bunyi Beep selepas kebenaran browser diberikan
                 try {
                     document.getElementById('beep').play();
                 } catch(e) {
-                    console.log("Audio disekat oleh pelayar web.");
+                    console.log("Audio disekat browser. Sila klik banner atas terlebih dahulu.");
                 }
                 
-                // Simpan log kehadiran ke koleksi "logs"
+                // Simpan log kehadiran unik ke koleksi "logs"
                 await db.collection("logs").add({
                     id: studentId,
                     name: studentData.name,
                     class: studentData.class,
-                    date: new Date().toLocaleDateString('en-GB'), // Format: DD/MM/YYYY
+                    date: hariIni,
                     time: new Date().toLocaleTimeString('en-GB', {hour12: false}), // Format: HH:MM:SS
                     status: "HADIR",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
@@ -101,7 +142,6 @@ async function onScanSuccess(decodedText) {
                 statusDiv.className = "status-box success";
                 lastScanned = decodedText;
                 
-                // Reset kawalan imbasan selepas 3 saat
                 setTimeout(() => { 
                     statusDiv.className = "status-box waiting"; 
                     statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
@@ -131,7 +171,6 @@ async function onScanSuccess(decodedText) {
         }
     }
 
-    // Pastikan dua baris ini kekal ada di bawah untuk aktifkan kamera
     const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
     html5QrcodeScanner.render(onScanSuccess);
 </script>
