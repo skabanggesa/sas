@@ -478,14 +478,6 @@ async function importCSVToCloud(event) {
         `).join('');
     }
 
-        // Detail Log Table
-        document.getElementById('reportBody').innerHTML = filteredLogs.slice(0, 50).map(l => 
-            `<tr><td>${l.date}</td><td>${l.time}</td><td>${l.name}</td><td>${l.class}</td></tr>`).join('');
-
-        updateChartUI(todayLogs.length, globalStudents.length - todayLogs.length);
-        }
-    }
-
     // FUNGSI SENARAI TIDAK HADIR
     function renderAbsentList() {
         const selectedClass = document.getElementById('absentClassSelect').value;
