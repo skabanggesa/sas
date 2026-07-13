@@ -270,7 +270,9 @@
         measurementId: "G-NZR5BXZKR1"
     };
 
-    firebase.initializeApp(firebaseConfig);
+    if (!firebase.apps.length) {
+        firebase.initializeApp(firebaseConfig);
+    }
     const db = firebase.firestore();
     const auth = firebase.auth();
 
@@ -278,9 +280,9 @@
     let globalStudents = [];
     let globalLogs = [];
     let myChart = null;
-    let userRole = 'admin'; // Lalai: admin
+    let userRole = 'admin'; 
 
-    // --- 1. FIREBASE AUTHENTICATION & ROLE MANAGEMENT ---
+    // --- 1. FIREBASE AUTHENTICATION ---
     function handleFirebaseLogin() {
         const email = document.getElementById('userEmail').value;
         const pass = document.getElementById('userPass').value;
@@ -290,7 +292,6 @@
         auth.signInWithEmailAndPassword(email, pass)
             .then((userCredential) => {
                 const loggedInEmail = userCredential.user.email.toLowerCase();
-                
                 if(loggedInEmail === "guru@sas.edu.my") {
                     userRole = 'teacher';
                     document.body.classList.add('role-teacher');
@@ -300,7 +301,6 @@
                     document.body.classList.remove('role-teacher');
                     openTab('m-data'); 
                 }
-
                 document.getElementById('login-overlay').style.display = 'none';
                 startRealtimeSync(); 
             })
@@ -317,21 +317,21 @@
             globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             syncDropdowns();
             renderStudentsTable();
-            if(globalLogs.length > 0) {
-                renderAbsentList(); 
-                processAttendanceAnalysis(); // Panggil analisis untuk mengemas kini data apabila pelajar berubah
-            }
+            renderClassSummary(); // Baiki: Pastikan ringkasan harian dipanggil
+            processAttendanceAnalysis(); // Selaraskan graf & jadual bawah
+            if(globalLogs.length > 0) renderAbsentList();
         });
 
         db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
             globalLogs = snapshot.docs.map(doc => doc.data());
             setupYearFilter();
+            renderClassSummary(); // Baiki: Pastikan ringkasan harian dikemaskini
+            processAttendanceAnalysis(); // Selaraskan graf & jadual bawah
             renderAbsentList(); 
-            processAttendanceAnalysis(); // Fungsi ini akan menguruskan cetakan log dan carta dengan betul
         });
     }
 
-    // --- 3. DATA MANAGEMENT (CLOUD VERSION) ---
+    // --- 3. DATA MANAGEMENT ---
     async function importCSVToCloud(event) {
         const file = event.target.files[0];
         if(!file) return;
@@ -339,29 +339,20 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
             const lines = e.target.result.split('\n').slice(1); 
-            
             let batch = db.batch(); 
             let counter = 0;
             let totalImported = 0;
 
             for (let line of lines) {
                 const parts = line.split(',');
-                
                 if(parts.length >= 3) {
                     const idMurid = parts[0].trim();
                     const name = parts[1].trim().toUpperCase();
                     const className = parts[2].trim().toUpperCase();
-
                     if (!idMurid || !name || !className) continue;
 
                     const studentRef = db.collection("students").doc(idMurid);
-                    
-                    batch.set(studentRef, {
-                        id: idMurid,
-                        name: name,
-                        class: className
-                    });
-
+                    batch.set(studentRef, { id: idMurid, name: name, class: className });
                     counter++;
                     totalImported++;
 
@@ -372,12 +363,8 @@
                     }
                 }
             }
-
-            if (counter > 0) {
-                await batch.commit();
-            }
-
-            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud.`);
+            if (counter > 0) await batch.commit();
+            alert(`Berjaya! ${totalImported} data murid telah dikemas kini.`);
         };
         reader.readAsText(file);
     }
@@ -406,10 +393,8 @@
 
     async function naikKelasCloud() {
         if(!confirm("Naikkan kelas murid? Murid Tahun 6 akan dipadam secara automatik.")) return;
-        
         const batch = db.batch();
         let count = 0;
-
         globalStudents.forEach(s => {
             let match = s.class.match(/\d+/);
             if(match) {
@@ -423,18 +408,36 @@
                 count++;
             }
         });
-
         await batch.commit();
         alert(`Berjaya memproses ${count} murid.`);
     }
 
-    // --- 4. UI, REPORT & ABSENT LOGIC ---
+    function backupSistem() {
+        const data = { murid: globalStudents, log: globalLogs, backup_at: new Date().toISOString() };
+        const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `BACKUP_KEHADIRAN_CLOUD_${new Date().getFullYear()}.json`;
+        a.click();
+    }
+
+    function downloadTemplate() {
+        const csvContent = "data:text/csv;charset=utf-8,ID MURID,NAMA MURID,KELAS\n070101012233,ALI BIN AHMAD,1 CEMERLANG\n070202024455,SITI BINTI ABU,1 BESTARI";
+        const link = document.createElement("a");
+        link.setAttribute("href", encodeURI(csvContent));
+        link.setAttribute("download", "TEMPLAT_MURID_KEHADIRAN.csv");
+        link.click();
+    }
+
+    // --- 4. UI & PAPARAN DATA ---
     function syncDropdowns() {
         const classes = [...new Set(globalStudents.map(s => s.class))].sort();
         const filters = ['classFilter', 'qrClassSelect', 'printByClassSelect', 'absentClassSelect'];
         
         filters.forEach(id => {
             const el = document.getElementById(id);
+            if(!el) return; // Baiki: Halang ralat jika menu dropdown lambat dijumpai
+            
             const currentVal = el.value;
             if(id === 'classFilter') el.innerHTML = '<option value="SEMUA">Semua Kelas</option>';
             else el.innerHTML = '<option value="">-- Pilih Kelas --</option>';
@@ -454,22 +457,34 @@
             <button class="btn btn-danger" style="padding:4px 8px" onclick="deleteStudentCloud('${s.id}')">×</button></td></tr>`).join('');
     }
 
-    function renderReport(logsToShow) {
-        const reportBody = document.getElementById('reportBody');
-        
-        if(!logsToShow || logsToShow.length === 0) {
-            reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran ditemui untuk tetapan penapis ini.</td></tr>`;
+    // BAIKI: FUNGSI JADUAL RINGKASAN HARIAN (DIKEMBALIKAN)
+    function renderClassSummary() {
+        const summaryBody = document.getElementById('classSummaryBody');
+        if(!summaryBody) return;
+
+        const today = new Date().toLocaleDateString('en-GB');
+        const todayLogs = globalLogs.filter(l => l && l.date === today);
+        const classes = [...new Set(globalStudents.map(s => s.class))].sort();
+
+        if(classes.length === 0) {
+            summaryBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:15px; color:var(--secondary);">Tiada data murid.</td></tr>`;
             return;
         }
 
-        reportBody.innerHTML = logsToShow.map(l => `
-            <tr>
-                <td>${l.date || '-'}</td>
-                <td><span class="badge badge-blue">${l.time || '-'}</span></td>
-                <td><b>${l.name || '-'}</b></td>
-                <td>${l.class || '-'}</td>
-            </tr>
-        `).join('');
+        summaryBody.innerHTML = classes.map(className => {
+            const enrolmen = globalStudents.filter(s => s.class === className).length;
+            const hadir = todayLogs.filter(l => l.class === className).length;
+            const peratus = enrolmen > 0 ? ((hadir / enrolmen) * 100).toFixed(1) : 0;
+
+            return `
+                <tr>
+                    <td><b>${className}</b></td>
+                    <td>${enrolmen}</td>
+                    <td><span class="badge badge-green">${hadir}</span></td>
+                    <td><b>${peratus}%</b></td>
+                </tr>
+            `;
+        }).join('');
     }
 
     function renderAbsentList() {
@@ -525,39 +540,153 @@
             try {
                 const hariIni = new Date().toLocaleDateString('en-GB');
                 await db.collection("logs").add({
-                    id: studentId,
-                    name: studentName,
-                    class: studentClass,
-                    date: hariIni,
-                    time: new Date().toLocaleTimeString('en-GB', {hour12: false}),
-                    status: "HADIR",
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    id: studentId, name: studentName, class: studentClass,
+                    date: hariIni, time: new Date().toLocaleTimeString('en-GB', {hour12: false}),
+                    status: "HADIR", timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                alert(`✅ Kehadiran ${studentName} berjaya direkodkan secara manual!`);
+                alert(`✅ Kehadiran ${studentName} direkodkan!`);
             } catch (err) {
-                console.error(err);
                 alert("❌ Ralat berlaku: " + err.message);
             }
         }
     }
 
+    // --- 5. ANALISIS & GRAF KESELURUHAN ---
     function setupYearFilter() {
         let years = [...new Set(globalLogs.map(l => l.date ? l.date.split('/')[2] : null))].filter(y => y);
         const curY = new Date().getFullYear().toString();
         if(!years.includes(curY)) years.push(curY);
         years.sort((a,b) => b-a);
         const yf = document.getElementById('yearFilter');
+        if(!yf) return;
         const current = yf.value;
         yf.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
         if(current) yf.value = current;
     }
 
-    // --- 5. PRINTING & OTHERS ---
+    function toggleAnalysisUI() {
+        const mode = document.getElementById('analysisMode').value;
+        const monthContainer = document.getElementById('monthFilterContainer');
+        if (mode === 'monthly') {
+            monthContainer.style.display = 'block';
+            document.getElementById('monthFilter').value = String(new Date().getMonth() + 1).padStart(2, '0');
+        } else {
+            monthContainer.style.display = 'none';
+        }
+        processAttendanceAnalysis();
+    }
+
+    function processAttendanceAnalysis() {
+        if (!globalLogs) return; 
+
+        const modeEl = document.getElementById('analysisMode');
+        const yearFilterEl = document.getElementById('yearFilter');
+        const monthFilterEl = document.getElementById('monthFilter');
+        
+        const mode = modeEl ? modeEl.value : 'daily';
+        const selectedYear = yearFilterEl && yearFilterEl.value ? yearFilterEl.value : new Date().getFullYear().toString();
+        const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
+        const today = new Date().toLocaleDateString('en-GB'); 
+
+        let totalExpected = (globalStudents && globalStudents.length > 0) ? globalStudents.length : 242; 
+        let filteredLogs = [];
+
+        if (mode === 'daily') {
+            filteredLogs = globalLogs.filter(l => l && l.date === today);
+            updateChartUI(filteredLogs.length, totalExpected - filteredLogs.length);
+        } else if (mode === 'monthly') {
+            filteredLogs = globalLogs.filter(l => {
+                if(!l || !l.date) return false;
+                const parts = l.date.split('/'); 
+                return parts[1] === selectedMonth && parts[2] === selectedYear;
+            });
+            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
+            updateChartUI(filteredLogs.length, (totalExpected * (uniqueDays || 1)) - filteredLogs.length);
+        } else if (mode === 'history') {
+            filteredLogs = globalLogs.filter(l => l && l.date && l.date.split('/')[2] === selectedYear);
+            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
+            updateChartUI(filteredLogs.length, (totalExpected * (uniqueDays || 1)) - filteredLogs.length);
+        }
+
+        const sortedLogs = filteredLogs.sort((a, b) => {
+            const dateA = a.date || ''; const dateB = b.date || '';
+            if(dateA !== dateB) return dateB.localeCompare(dateA);
+            const timeA = a.time || ''; const timeB = b.time || '';
+            return timeB.localeCompare(timeA);
+        });
+        
+        renderReport(sortedLogs);
+    }
+
+    function updateChartUI(present, absent) {
+        const chartEl = document.getElementById('attendanceChart');
+        if(!chartEl) return;
+
+        const actualAbsent = absent < 0 ? 0 : absent;
+        const total = present + actualAbsent;
+        const percentage = total > 0 ? ((present / total) * 100).toFixed(1) : 0;
+
+        const ctx = chartEl.getContext('2d');
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['Hadir', 'Tidak Hadir'],
+                datasets: [{ data: [present, actualAbsent], backgroundColor: ['#10b981', '#e2e8f0'], borderWidth: 0 }]
+            },
+            options: { cutout: '75%', plugins: { legend: { display: false } } }
+        });
+        
+        document.getElementById('chartLegend').innerHTML = `
+            <div style="font-size:1.2rem; font-weight:800; color:#1e293b; margin-bottom:8px;">Peratus Hadir: ${percentage}%</div>
+            <span style="color:#10b981; font-weight:bold;">● Hadir: ${present}</span> &nbsp;&nbsp; 
+            <span style="color:#94a3b8; font-weight:bold;">● Tidak Hadir: ${actualAbsent}</span>
+        `;
+    }
+
+    function renderReport(logsToShow) {
+        const reportBody = document.getElementById('reportBody');
+        if(!reportBody) return;
+        
+        if(!logsToShow || logsToShow.length === 0) {
+            reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran.</td></tr>`;
+            return;
+        }
+
+        reportBody.innerHTML = logsToShow.map(l => `
+            <tr>
+                <td>${l.date || '-'}</td>
+                <td><span class="badge badge-blue">${l.time || '-'}</span></td>
+                <td><b>${l.name || '-'}</b></td>
+                <td>${l.class || '-'}</td>
+            </tr>
+        `).join('');
+    }
+
+    function exportExcel() {
+        const selYear = document.getElementById('yearFilter').value;
+        const filtered = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
+        const ws = XLSX.utils.json_to_sheet(filtered);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Laporan");
+        XLSX.writeFile(wb, `Laporan_Kehadiran_${selYear}.xlsx`);
+    }
+
+    // --- 6. PRINTING & QR CODE ---
     function openTab(id) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
         document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active-section');
         document.getElementById('tab-' + id.split('-')[1]).classList.add('active');
+    }
+
+    function updateQRNameDropdown() {
+        const cls = document.getElementById('qrClassSelect').value;
+        const list = globalStudents.filter(s => s.class === cls).sort((a,b) => a.name.localeCompare(b.name));
+        const ns = document.getElementById('qrNameSelect');
+        if(!ns) return;
+        ns.innerHTML = '<option value="">-- Pilih Nama --</option>';
+        list.forEach(s => ns.innerHTML += `<option value="${s.name}">${s.name}</option>`);
     }
 
     async function getQRImage(text) {
@@ -585,7 +714,7 @@
             .qr-space { margin: auto 0; display: flex; justify-content: center; align-items: center; }
             .qr-space img { width: 34mm; height: 34mm; object-fit: contain; }
             .student-details { width: 100%; border-top: 1px solid #e2e8f0; padding-top: 3mm; margin-top: auto; }
-            .student-name { font-size: 8pt; font-weight: 700; color: #0f172a; margin: 0 0 2px 0; text-transform: uppercase; line-height: 1.3; min-height: 2.6em; display: flex; align-items: center; justify-content: center; }
+            .student-name { font-size: 8pt; font-weight: 700; color: #0f172a; margin: 0 0 2px 0; text-transform: uppercase; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; min-height: 2.6em; display: flex; align-items: center; justify-content: center; }
             .student-class { font-size: 7.5pt; font-weight: 700; color: #2563eb; margin: 0; text-transform: uppercase; }
             .single-layout { display: flex; justify-content: center; align-items: center; height: 100vh; }
         </style>
@@ -594,238 +723,40 @@
     async function printIndividual() {
         const selectedValue = document.getElementById('qrNameSelect').value;
         if(!selectedValue) return alert("Pilih murid!");
-        
         const s = globalStudents.find(st => st.id === selectedValue || st.name === selectedValue);
         if(!s) return alert("Data murid tidak lengkap!");
-
-        const qrPayload = s.id || s.name;
-        const src = await getQRImage(qrPayload);
+        const src = await getQRImage(s.id || s.name);
         const win = window.open('', '', 'width=600,height=700');
-        
-        win.document.write(`
-            <html>
-            <head>${cardStyles}</head>
-            <body class="single-layout">
-                <div class="id-card">
-                    <div class="school-header">
-                        <h1 class="school-name">SK Abang Gesa</h1>
-                        <div class="system-title">Student Attendance System</div>
-                    </div>
-                    <div class="qr-space">
-                        <img src="${src}">
-                    </div>
-                    <div class="student-details">
-                        <div class="student-name">${s.name}</div>
-                        <div class="student-class">${s.class}</div>
-                    </div>
-                </div>
-                <script>setTimeout(()=>{window.print();window.close();},500);<\/script>
-            </body>
-            </html>
-        `);
+        win.document.write(`<html><head>${cardStyles}</head><body class="single-layout"><div class="id-card"><div class="school-header"><h1 class="school-name">SK Abang Gesa</h1><div class="system-title">Student Attendance System</div></div><div class="qr-space"><img src="${src}"></div><div class="student-details"><div class="student-name">${s.name}</div><div class="student-class">${s.class}</div></div></div><script>setTimeout(()=>{window.print();window.close();},500);<\/script></body></html>`);
     }
 
     async function printClass() {
         const target = document.getElementById('printByClassSelect').value;
         if(!target) return alert("Pilih kelas!");
-        
         const list = globalStudents.filter(s => s.class === target).sort((a,b) => a.name.localeCompare(b.name));
-        if(list.length === 0) return alert("Tiada murid dalam kelas ini!");
-
+        if(list.length === 0) return alert("Tiada murid!");
         const win = window.open('', '', 'width=900,height=1000');
         win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN: ${target}</h2><div class="grid">`);
-        
         for(let s of list) {
-            const qrPayload = s.id || s.name;
-            const src = await getQRImage(qrPayload);
-            win.document.write(`
-                <div class="id-card">
-                    <div class="school-header">
-                        <h1 class="school-name">SK Abang Gesa</h1>
-                        <div class="system-title">Student Attendance System</div>
-                    </div>
-                    <div class="qr-space">
-                        <img src="${src}">
-                    </div>
-                    <div class="student-details">
-                        <div class="student-name">${s.name}</div>
-                        <div class="student-class">${s.class}</div>
-                    </div>
-                </div>
-            `);
+            const src = await getQRImage(s.id || s.name);
+            win.document.write(`<div class="id-card"><div class="school-header"><h1 class="school-name">SK Abang Gesa</h1><div class="system-title">Student Attendance System</div></div><div class="qr-space"><img src="${src}"></div><div class="student-details"><div class="student-name">${s.name}</div><div class="student-class">${s.class}</div></div></div>`);
         }
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1000);<\/script></body></html>`);
     }
 
     async function printBulk() {
-        if(globalStudents.length === 0) return alert("Tiada data murid untuk dicetak!");
-        
+        if(globalStudents.length === 0) return alert("Tiada data!");
         const list = [...globalStudents].sort((a, b) => {
             if (a.class !== b.class) return a.class.localeCompare(b.class);
             return a.name.localeCompare(b.name);
         });
-
         const win = window.open('', '', 'width=900,height=1000');
-        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN SEKOLAH (BULK)</h2><div class="grid">`);
-        
+        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN SEKOLAH</h2><div class="grid">`);
         for(let s of list) {
-            const qrPayload = s.id || s.name;
-            const src = await getQRImage(qrPayload);
-            win.document.write(`
-                <div class="id-card">
-                    <div class="school-header">
-                        <h1 class="school-name">SK Abang Gesa</h1>
-                        <div class="system-title">Student Attendance System</div>
-                    </div>
-                    <div class="qr-space">
-                        <img src="${src}">
-                    </div>
-                    <div class="student-details">
-                        <div class="student-name">${s.name}</div>
-                        <div class="student-class">${s.class}</div>
-                    </div>
-                </div>
-            `);
+            const src = await getQRImage(s.id || s.name);
+            win.document.write(`<div class="id-card"><div class="school-header"><h1 class="school-name">SK Abang Gesa</h1><div class="system-title">Student Attendance System</div></div><div class="qr-space"><img src="${src}"></div><div class="student-details"><div class="student-name">${s.name}</div><div class="student-class">${s.class}</div></div></div>`);
         }
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1500);<\/script></body></html>`);
-    }
-
-    function updateChartUI(present, absent) {
-        const actualAbsent = absent < 0 ? 0 : absent;
-        const total = present + actualAbsent;
-        let percentage = 0;
-        
-        if (total > 0) {
-            percentage = ((present / total) * 100).toFixed(1); 
-        }
-
-        const ctx = document.getElementById('attendanceChart').getContext('2d');
-        if (myChart) myChart.destroy();
-        myChart = new Chart(ctx, {
-            type: 'doughnut',
-            data: {
-                labels: ['Hadir', 'Tidak Hadir'],
-                datasets: [{ 
-                    data: [present, actualAbsent], 
-                    backgroundColor: ['#10b981', '#e2e8f0'], 
-                    borderWidth: 0 
-                }]
-            },
-            options: { cutout: '75%', plugins: { legend: { display: false } } }
-        });
-        
-        document.getElementById('chartLegend').innerHTML = `
-            <div style="font-size:1.2rem; font-weight:800; color:#1e293b; margin-bottom:8px;">
-                Peratus Hadir: ${percentage}%
-            </div>
-            <span style="color:#10b981; font-weight:bold;">● Hadir: ${present}</span> &nbsp;&nbsp; 
-            <span style="color:#94a3b8; font-weight:bold;">● Tidak Hadir: ${actualAbsent}</span>
-        `;
-    }
-
-    function exportExcel() {
-        const selYear = document.getElementById('yearFilter').value;
-        const filtered = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
-        const ws = XLSX.utils.json_to_sheet(filtered);
-        const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Laporan Kehadiran");
-        XLSX.writeFile(wb, `Laporan_Kehadiran_Cloud_${selYear}.xlsx`);
-    }
-
-    function backupSistem() {
-        const data = { murid: globalStudents, log: globalLogs, backup_at: new Date().toISOString() };
-        const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `BACKUP_KEHADIRAN_CLOUD_${new Date().getFullYear()}.json`;
-        a.click();
-    }
-
-    function updateQRNameDropdown() {
-        const cls = document.getElementById('qrClassSelect').value;
-        const list = globalStudents.filter(s => s.class === cls).sort((a,b) => a.name.localeCompare(b.name));
-        const ns = document.getElementById('qrNameSelect');
-        ns.innerHTML = '<option value="">-- Pilih Nama --</option>';
-        list.forEach(s => ns.innerHTML += `<option value="${s.name}">${s.name}</option>`);
-    }
-
-    function downloadTemplate() {
-        const csvContent = "data:text/csv;charset=utf-8,ID MURID,NAMA MURID,KELAS\n070101012233,ALI BIN AHMAD,1 CEMERLANG\n070202024455,SITI BINTI ABU,1 BESTARI";
-        const link = document.createElement("a");
-        link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", "TEMPLAT_MURID_KEHADIRAN.csv");
-        link.click();
-    }
-
-    function toggleAnalysisUI() {
-        const mode = document.getElementById('analysisMode').value;
-        const monthContainer = document.getElementById('monthFilterContainer');
-        
-        if (mode === 'monthly') {
-            monthContainer.style.display = 'block';
-            const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
-            document.getElementById('monthFilter').value = currentMonth;
-        } else {
-            monthContainer.style.display = 'none';
-        }
-        processAttendanceAnalysis();
-    }
-
-    function processAttendanceAnalysis() {
-        const modeEl = document.getElementById('analysisMode');
-        const yearFilterEl = document.getElementById('yearFilter');
-        const monthFilterEl = document.getElementById('monthFilter');
-        
-        const mode = modeEl ? modeEl.value : 'daily';
-        const selectedYear = yearFilterEl ? yearFilterEl.value : new Date().getFullYear().toString();
-        const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
-        const today = new Date().toLocaleDateString('en-GB'); 
-
-        // Pembetulan: Akses terus kepada pembolehubah global scope (buang prefix window.)
-        if (!globalLogs || globalLogs.length === 0) return; 
-        
-        let totalExpected = globalStudents && globalStudents.length > 0 ? globalStudents.length : 242; 
-
-        let filteredLogs = [];
-
-        if (mode === 'daily') {
-            filteredLogs = globalLogs.filter(l => l && l.date === today);
-            const presentCount = filteredLogs.length;
-            const absentCount = totalExpected - presentCount;
-            updateChartUI(presentCount, absentCount);
-
-        } else if (mode === 'monthly') {
-            filteredLogs = globalLogs.filter(l => {
-                if(!l || !l.date) return false;
-                const parts = l.date.split('/'); 
-                return parts[1] === selectedMonth && parts[2] === selectedYear;
-            });
-            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
-            const totalExpectedMonthly = totalExpected * (uniqueDays || 1); 
-            const presentCount = filteredLogs.length;
-            const absentCount = totalExpectedMonthly - presentCount;
-            updateChartUI(presentCount, absentCount);
-
-        } else if (mode === 'history') {
-            filteredLogs = globalLogs.filter(l => l && l.date && l.date.split('/')[2] === selectedYear);
-            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
-            const totalExpectedHistory = totalExpected * (uniqueDays || 1);
-            const presentCount = filteredLogs.length;
-            const absentCount = totalExpectedHistory - presentCount;
-            updateChartUI(presentCount, absentCount);
-        }
-
-        // Pembetulan: Susunan yang selamat (tidak akan crash sekiranya ada data kosong)
-        const sortedLogs = filteredLogs.sort((a, b) => {
-            const dateA = a.date || '';
-            const dateB = b.date || '';
-            if(dateA !== dateB) return dateB.localeCompare(dateA);
-            const timeA = a.time || '';
-            const timeB = b.time || '';
-            return timeB.localeCompare(timeA);
-        });
-        
-        renderReport(sortedLogs);
     }
 </script>
 </body>
