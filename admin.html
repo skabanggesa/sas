@@ -309,13 +309,13 @@
     }
 
     // --- 3. DATA MANAGEMENT (CLOUD VERSION) ---
-    async function importCSVToCloud(event) {
+async function importCSVToCloud(event) {
         const file = event.target.files[0];
         if(!file) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const lines = e.target.result.split('\n').slice(1); 
+            const lines = e.target.result.split('\n').slice(1); // Buang header CSV
             
             let batch = db.batch(); 
             let counter = 0;
@@ -323,16 +323,20 @@
 
             for (let line of lines) {
                 const parts = line.split(',');
-                if(parts.length >= 2) {
-                    const name = parts[0].trim().toUpperCase();
-                    const className = parts[1].trim().toUpperCase();
+                
+                // Pastikan ada 3 kolum: ID, Nama, Kelas
+                if(parts.length >= 3) {
+                    const idMurid = parts[0].trim();
+                    const name = parts[1].trim().toUpperCase();
+                    const className = parts[2].trim().toUpperCase();
 
-                    if (!name || !className) continue;
+                    if (!idMurid || !name || !className) continue;
 
-                    const customDocId = name.replace(/[^A-Z0-9]/g, "_");
-                    const studentRef = db.collection("students").doc(customDocId);
+                    // GUNAKAN ID MURID SEBAGAI ID DOKUMEN FIREBASE
+                    const studentRef = db.collection("students").doc(idMurid);
                     
                     batch.set(studentRef, {
+                        id: idMurid,
                         name: name,
                         class: className
                     });
@@ -348,8 +352,11 @@
                 }
             }
 
-            if (counter > 0) { await batch.commit(); }
-            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud tanpa duplikat.`);
+            if (counter > 0) {
+                await batch.commit();
+            }
+
+            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud menggunakan ID Unik.`);
         };
         reader.readAsText(file);
     }
@@ -598,8 +605,8 @@
         list.forEach(s => ns.innerHTML += `<option value="${s.name}">${s.name}</option>`);
     }
 
-    function downloadTemplate() {
-        const csvContent = "data:text/csv;charset=utf-8,NAMA MURID,KELAS\nALI BIN AHMAD,1 CEMERLANG\nSITI BINTI ABU,1 BESTARI";
+function downloadTemplate() {
+        const csvContent = "data:text/csv;charset=utf-8,ID MURID,NAMA MURID,KELAS\n070101012233,ALI BIN AHMAD,1 CEMERLANG\n070202024455,SITI BINTI ABU,1 BESTARI";
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent));
         link.setAttribute("download", "TEMPLAT_MURID_KEHADIRAN.csv");
