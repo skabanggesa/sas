@@ -50,37 +50,58 @@
     let lastScanned = "";
     let isProcessing = false;
 
-    async function onScanSuccess(decodedText) {
+async function onScanSuccess(decodedText) {
         if (isProcessing || decodedText === lastScanned) return;
         
         isProcessing = true;
-        const studentName = decodedText.trim().toUpperCase();
+        const scannedText = decodedText.trim().toUpperCase(); // Bersihkan teks QR
         const statusDiv = document.getElementById('status');
         
         try {
-            // Semak nama murid dalam koleksi "students"
-            const studentId = decodedText.trim(); 
-            const q = await db.collection("students").where("id", "==", studentId).get();
+            let studentData = null;
+            let studentId = "";
+
+            // LANGKAH 1: Cuba cari jika teks QR ialah ID/IC Murid (ID Dokumen)
+            const docRef = db.collection("students").doc(scannedText);
+            const docSnap = await docRef.get();
             
-            if (!q.empty) {
-                const s = q.docs[0].data();
-                document.getElementById('beep').play();
+            if (docSnap.exists) {
+                studentData = docSnap.data();
+                studentId = scannedText;
+            } else {
+                // LANGKAH 2: Jika tak jumpa, cuba cari jika teks QR ialah NAMA MURID
+                const q = await db.collection("students").where("name", "==", scannedText).get();
+                if (!q.empty) {
+                    studentData = q.docs[0].data();
+                    studentId = studentData.id; // Ambil ID unik murid dari database
+                }
+            }
+            
+            // JIKA MURID DIJUMPAI (Sama ada melalui ID atau Nama)
+            if (studentData) {
+                // Bunyi Beep Kehadiran
+                try {
+                    document.getElementById('beep').play();
+                } catch(e) {
+                    console.log("Audio disekat oleh pelayar web.");
+                }
                 
                 // Simpan log kehadiran ke koleksi "logs"
                 await db.collection("logs").add({
-                    name: s.name,
-                    class: s.class,
+                    id: studentId,
+                    name: studentData.name,
+                    class: studentData.class,
                     date: new Date().toLocaleDateString('en-GB'), // Format: DD/MM/YYYY
                     time: new Date().toLocaleTimeString('en-GB', {hour12: false}), // Format: HH:MM:SS
                     status: "HADIR",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
 
-                statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${s.name}<br>(${s.class})`;
+                statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${studentData.name}<br>(${studentData.class})`;
                 statusDiv.className = "status-box success";
                 lastScanned = decodedText;
                 
-                // Reset scanner selepas 3 saat untuk murid seterusnya
+                // Reset kawalan imbasan selepas 3 saat
                 setTimeout(() => { 
                     statusDiv.className = "status-box waiting"; 
                     statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
@@ -89,7 +110,8 @@
                 }, 3000);
 
             } else {
-                statusDiv.innerHTML = `❌ GAGAL!<br>Murid tidak berdaftar dalam sistem.`;
+                // JIKA MEMANG TIADA DALAM DATABASE
+                statusDiv.innerHTML = `❌ GAGAL DETECT!<br>Data (${scannedText}) tiada dalam sistem Cloud.`;
                 statusDiv.className = "status-box error";
                 setTimeout(() => { 
                     statusDiv.className = "status-box waiting"; 
@@ -98,11 +120,18 @@
                 }, 3000);
             }
         } catch (err) {
-            console.error(err);
-            isProcessing = false;
+            console.error("Ralat Firebase:", err);
+            statusDiv.innerHTML = `❌ REKOD GAGAL!<br>${err.message}`;
+            statusDiv.className = "status-box error";
+            setTimeout(() => { 
+                statusDiv.className = "status-box waiting"; 
+                statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
+                isProcessing = false;
+            }, 5000);
         }
     }
 
+    // Pastikan dua baris ini kekal ada di bawah untuk aktifkan kamera
     const html5QrcodeScanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 });
     html5QrcodeScanner.render(onScanSuccess);
 </script>
