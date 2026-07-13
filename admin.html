@@ -259,7 +259,7 @@
 </div>
 
 <script>
-    // --- KONFIGURASI FIREBASE ANDA ---
+// --- KONFIGURASI FIREBASE ANDA ---
     const firebaseConfig = {
         apiKey: "AIzaSyDNlFEnA9ZGLFTFCuwMK5ZMzv3D8Ww2BAo",
         authDomain: "smppro-2845e.firebaseapp.com",
@@ -291,15 +291,14 @@
             .then((userCredential) => {
                 const loggedInEmail = userCredential.user.email.toLowerCase();
                 
-                // Semak jika emel ini ialah ID Guru
                 if(loggedInEmail === "guru@sas.edu.my") {
                     userRole = 'teacher';
                     document.body.classList.add('role-teacher');
-                    openTab('m-report'); // Guru terus masuk ke tab Analisis
+                    openTab('m-report'); 
                 } else {
                     userRole = 'admin';
                     document.body.classList.remove('role-teacher');
-                    openTab('m-data'); // Admin masuk ke tab Data Murid
+                    openTab('m-data'); 
                 }
 
                 document.getElementById('login-overlay').style.display = 'none';
@@ -318,29 +317,28 @@
             globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             syncDropdowns();
             renderStudentsTable();
-            if(globalLogs.length > 0) {
-                renderReport(); 
-                renderAbsentList(); // Kemas kini senarai tak hadir secara live
-            }
+            renderAbsentList(); 
+            renderClassSummary(); // Kemas kini jadual ringkasan harian
+            processAttendanceAnalysis();
         });
 
         db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
             globalLogs = snapshot.docs.map(doc => doc.data());
             setupYearFilter();
-            renderReport();
-            renderAbsentList(); // Kemas kini senarai tak hadir secara live
+            renderAbsentList(); 
+            renderClassSummary(); // Kemas kini jadual ringkasan harian
             processAttendanceAnalysis();
         });
     }
 
     // --- 3. DATA MANAGEMENT (CLOUD VERSION) ---
-async function importCSVToCloud(event) {
+    async function importCSVToCloud(event) {
         const file = event.target.files[0];
         if(!file) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const lines = e.target.result.split('\n').slice(1); // Buang header CSV
+            const lines = e.target.result.split('\n').slice(1); 
             
             let batch = db.batch(); 
             let counter = 0;
@@ -348,8 +346,6 @@ async function importCSVToCloud(event) {
 
             for (let line of lines) {
                 const parts = line.split(',');
-                
-                // Pastikan ada 3 kolum: ID, Nama, Kelas
                 if(parts.length >= 3) {
                     const idMurid = parts[0].trim();
                     const name = parts[1].trim().toUpperCase();
@@ -357,14 +353,8 @@ async function importCSVToCloud(event) {
 
                     if (!idMurid || !name || !className) continue;
 
-                    // GUNAKAN ID MURID SEBAGAI ID DOKUMEN FIREBASE
                     const studentRef = db.collection("students").doc(idMurid);
-                    
-                    batch.set(studentRef, {
-                        id: idMurid,
-                        name: name,
-                        class: className
-                    });
+                    batch.set(studentRef, { id: idMurid, name: name, class: className });
 
                     counter++;
                     totalImported++;
@@ -377,11 +367,8 @@ async function importCSVToCloud(event) {
                 }
             }
 
-            if (counter > 0) {
-                await batch.commit();
-            }
-
-            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud menggunakan ID Unik.`);
+            if (counter > 0) await batch.commit();
+            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud.`);
         };
         reader.readAsText(file);
     }
@@ -439,6 +426,7 @@ async function importCSVToCloud(event) {
         
         filters.forEach(id => {
             const el = document.getElementById(id);
+            if(!el) return;
             const currentVal = el.value;
             if(id === 'classFilter') el.innerHTML = '<option value="SEMUA">Semua Kelas</option>';
             else el.innerHTML = '<option value="">-- Pilih Kelas --</option>';
@@ -458,17 +446,48 @@ async function importCSVToCloud(event) {
             <button class="btn btn-danger" style="padding:4px 8px" onclick="deleteStudentCloud('${s.id}')">×</button></td></tr>`).join('');
     }
 
-// FUNGSI RENDER JADUAL LOG YANG MENERIMA DATA TAPISAN
+    // FUNGSI BARU: MENGIRA & MEMAPARKAN JADUAL RINGKASAN HARIAN MENGIKUT KELAS
+    function renderClassSummary() {
+        const summaryBody = document.getElementById('classSummaryBody');
+        if(!summaryBody) return;
+
+        const today = new Date().toLocaleDateString('en-GB');
+        const todayLogs = globalLogs.filter(l => l && l.date === today);
+        const classes = [...new Set(globalStudents.map(s => s.class))].sort();
+
+        if(classes.length === 0) {
+            summaryBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:15px; color:var(--secondary);">Tiada data murid dimuat naik.</td></tr>`;
+            return;
+        }
+
+        summaryBody.innerHTML = classes.map(className => {
+            const enrolmen = globalStudents.filter(s => s.class === className).length;
+            const hadir = todayLogs.filter(l => l.class === className).length;
+            const peratus = enrolmen > 0 ? ((hadir / enrolmen) * 100).toFixed(1) : 0;
+
+            return `
+                <tr>
+                    <td><b>${className}</b></td>
+                    <td>${enrolmen}</td>
+                    <td><span class="badge badge-green">${hadir}</span></td>
+                    <td><b>${peratus}%</b></td>
+                </tr>
+            `;
+        }).join('');
+    }
+
     function renderReport(logsToShow) {
         const reportBody = document.getElementById('reportBody');
+        if(!reportBody) return;
         
-        if(!logsToShow || logsToShow.length === 0) {
+        const dataToRender = logsToShow || [];
+
+        if(dataToRender.length === 0) {
             reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran ditemui untuk tetapan penapis ini.</td></tr>`;
             return;
         }
 
-        // Paparkan log masuk ke dalam baris jadual HTML
-        reportBody.innerHTML = logsToShow.map(l => `
+        reportBody.innerHTML = dataToRender.map(l => `
             <tr>
                 <td>${l.date || '-'}</td>
                 <td><span class="badge badge-blue">${l.time || '-'}</span></td>
@@ -478,7 +497,6 @@ async function importCSVToCloud(event) {
         `).join('');
     }
 
-    // FUNGSI SENARAI TIDAK HADIR
     function renderAbsentList() {
         const selectedClass = document.getElementById('absentClassSelect').value;
         const absentTable = document.getElementById('absentTable');
@@ -494,61 +512,10 @@ async function importCSVToCloud(event) {
         }
 
         const today = new Date().toLocaleDateString('en-GB');
-        
-        // Dapatkan semua murid dalam kelas yang dipilih
         const studentsInClass = globalStudents.filter(s => s.class === selectedClass);
-        // Dapatkan semua rekod kehadiran untuk kelas yang dipilih pada HARI INI
         const presentLogs = globalLogs.filter(l => l.date === today && l.class === selectedClass);
-        const presentNames = presentLogs.map(l => l.name);
-
-        // Cari murid yang NAMANYA TIADA dalam log hari ini
-        const absentStudents = studentsInClass.filter(s => !presentNames.includes(s.name));
-
-        if(studentsInClass.length === 0) {
-            absentTable.style.display = 'none';
-            absentMessage.style.display = 'block';
-            absentMessage.innerHTML = "Tiada murid didaftarkan dalam kelas ini.";
-            absentMessage.style.color = "var(--secondary)";
-        } else if(absentStudents.length === 0) {
-            absentTable.style.display = 'none';
-            absentMessage.style.display = 'block';
-            absentMessage.innerHTML = "🎉 TAHNIAH! Semua murid hadir penuh hari ini.";
-            absentMessage.style.color = "var(--success)";
-        } else {
-            absentTable.style.display = 'table';
-            absentMessage.style.display = 'none';
-            
-            absentBody.innerHTML = absentStudents.sort((a,b) => a.name.localeCompare(b.name)).map((s, i) => 
-                `<tr><td>${i+1}</td><td><b>${s.name}</b></td><td><span class="badge badge-red">Tiada Rekod</span></td></tr>`
-            ).join('');
-        }
-    }
-
-    // FUNGSI SENARAI TIDAK HADIR (DIKEMASKINI DENGAN BUTANG MANUAL)
-    function renderAbsentList() {
-        const selectedClass = document.getElementById('absentClassSelect').value;
-        const absentTable = document.getElementById('absentTable');
-        const absentMessage = document.getElementById('absentMessage');
-        const absentBody = document.getElementById('absentBody');
-
-        if(!selectedClass) {
-            absentTable.style.display = 'none';
-            absentMessage.style.display = 'block';
-            absentMessage.innerHTML = "Sila pilih kelas untuk menyemak senarai tidak hadir.";
-            absentMessage.style.color = "var(--secondary)";
-            return;
-        }
-
-        const today = new Date().toLocaleDateString('en-GB');
-        
-        // Dapatkan semua murid dalam kelas yang dipilih
-        const studentsInClass = globalStudents.filter(s => s.class === selectedClass);
-        // Dapatkan semua rekod kehadiran untuk kelas yang dipilih pada HARI INI
-        const presentLogs = globalLogs.filter(l => l.date === today && l.class === selectedClass);
-        // Tukar pencarian kepada ID untuk lebih tepat
         const presentIds = presentLogs.map(l => l.id); 
 
-        // Cari murid yang ID-NYA TIADA dalam log hari ini
         const absentStudents = studentsInClass.filter(s => !presentIds.includes(s.id));
 
         if(studentsInClass.length === 0) {
@@ -565,7 +532,6 @@ async function importCSVToCloud(event) {
             absentTable.style.display = 'table';
             absentMessage.style.display = 'none';
             
-            // Masukkan Butang Tanda Hadir pada jadual
             absentBody.innerHTML = absentStudents.sort((a,b) => a.name.localeCompare(b.name)).map((s, i) => 
                 `<tr>
                     <td>${i+1}</td>
@@ -579,13 +545,10 @@ async function importCSVToCloud(event) {
         }
     }
 
-    // FUNGSI BAHARU: REKOD KEHADIRAN MANUAL
     async function markAttendanceManual(studentId, studentName, studentClass) {
         if(confirm(`Sahkan kehadiran manual untuk ${studentName}?`)) {
             try {
                 const hariIni = new Date().toLocaleDateString('en-GB');
-
-                // Simpan data log kehadiran ke Firebase
                 await db.collection("logs").add({
                     id: studentId,
                     name: studentName,
@@ -595,14 +558,10 @@ async function importCSVToCloud(event) {
                     status: "HADIR",
                     timestamp: firebase.firestore.FieldValue.serverTimestamp()
                 });
-
                 alert(`✅ Kehadiran ${studentName} berjaya direkodkan secara manual!`);
-                // Nota: Senarai tidak hadir akan automatik dikemaskini dan nama murid akan hilang dari senarai 
-                // kerana fungsi startRealtimeSync() kita sedang berjalan di latar belakang.
-
             } catch (err) {
                 console.error(err);
-                alert("❌ Ralat berlaku semasa merekod kehadiran manual: " + err.message);
+                alert("❌ Ralat berlaku: " + err.message);
             }
         }
     }
@@ -618,7 +577,7 @@ async function importCSVToCloud(event) {
         if(current) yf.value = current;
     }
 
-// --- 5. PRINTING & OTHERS (REKA BENTUK KAD KREDIT PREMIUM) ---
+    // --- 5. PRINTING & OTHERS ---
     function openTab(id) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
         document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
@@ -630,7 +589,7 @@ async function importCSVToCloud(event) {
         return new Promise((resolve) => {
             const tempDiv = document.getElementById('tempQR');
             tempDiv.innerHTML = '';
-            new QRCode(tempDiv, { text: text, width: 256, height: 256 }); // Dinaikkan resolusi kepada 256 paparan lebih tajam
+            new QRCode(tempDiv, { text: text, width: 256, height: 256 });
             const check = setInterval(() => {
                 const img = tempDiv.querySelector('img');
                 if (img && img.src.startsWith('data:image')) { clearInterval(check); resolve(img.src); }
@@ -638,42 +597,21 @@ async function importCSVToCloud(event) {
         });
     }
 
-    // GAYA KAD KREDIT STANDARD (KONGSI UNTUK SEMUA CETAKAN)
     const cardStyles = `
         <style>
             @page { size: A4; margin: 0; }
             body { margin: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
             .page-title { text-align: center; font-size: 14pt; margin: 20px 0 0 0; color: #334155; font-weight: bold; page-break-after: avoid; }
             .grid { display: grid; grid-template-columns: repeat(3, 54mm); gap: 6mm 10mm; justify-content: center; padding: 10mm; }
-            
-            /* Saiz Standard Kad Kredit Ukuran CR80 (54mm x 85.6mm) */
-            .id-card { 
-                width: 54mm; 
-                height: 85.6mm; 
-                border: 1px dashed #cbd5e1; 
-                box-sizing: border-box; 
-                padding: 6mm 4mm 4mm 4mm; 
-                text-align: center; 
-                display: flex; 
-                flex-direction: column; 
-                align-items: center; 
-                background: #ffffff; 
-                page-break-inside: avoid; 
-                position: relative;
-                overflow: hidden;
-            }
+            .id-card { width: 54mm; height: 85.6mm; border: 1px dashed #cbd5e1; box-sizing: border-box; padding: 6mm 4mm 4mm 4mm; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; page-break-inside: avoid; position: relative; overflow: hidden; }
             .school-header { width: 100%; margin-bottom: 4mm; }
             .school-name { font-size: 9.5pt; font-weight: 800; color: #1e293b; margin: 0; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2; }
             .system-title { font-size: 6pt; color: #64748b; margin: 2px 0 0 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
-            
             .qr-space { margin: auto 0; display: flex; justify-content: center; align-items: center; }
             .qr-space img { width: 34mm; height: 34mm; object-fit: contain; }
-            
             .student-details { width: 100%; border-top: 1px solid #e2e8f0; padding-top: 3mm; margin-top: auto; }
-            .student-name { font-size: 8pt; font-weight: 700; color: #0f172a; margin: 0 0 2px 0; text-transform: uppercase; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; min-height: 2.6em; display: flex; align-items: center; justify-content: center; }
+            .student-name { font-size: 8pt; font-weight: 700; color: #0f172a; margin: 0 0 2px 0; text-transform: uppercase; line-height: 1.3; min-height: 2.6em; display: flex; align-items: center; justify-content: center; }
             .student-class { font-size: 7.5pt; font-weight: 700; color: #2563eb; margin: 0; text-transform: uppercase; }
-            
-            /* Tetapan khusus cetakan individu supaya duduk tengah kertas */
             .single-layout { display: flex; justify-content: center; align-items: center; height: 100vh; }
         </style>
     `;
@@ -682,11 +620,10 @@ async function importCSVToCloud(event) {
         const selectedValue = document.getElementById('qrNameSelect').value;
         if(!selectedValue) return alert("Pilih murid!");
         
-        // Cari data murid lengkap daripada global array
         const s = globalStudents.find(st => st.id === selectedValue || st.name === selectedValue);
         if(!s) return alert("Data murid tidak lengkap!");
 
-        const qrPayload = s.id || s.name; // Guna ID jika ada, jika tidak guna Nama
+        const qrPayload = s.id || s.name;
         const src = await getQRImage(qrPayload);
         const win = window.open('', '', 'width=600,height=700');
         
@@ -742,14 +679,12 @@ async function importCSVToCloud(event) {
                 </div>
             `);
         }
-        
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1000);<\/script></body></html>`);
     }
 
     async function printBulk() {
         if(globalStudents.length === 0) return alert("Tiada data murid untuk dicetak!");
         
-        // Susun susunan mengikut kelas, kemudian nama murid
         const list = [...globalStudents].sort((a, b) => {
             if (a.class !== b.class) return a.class.localeCompare(b.class);
             return a.name.localeCompare(b.name);
@@ -777,18 +712,16 @@ async function importCSVToCloud(event) {
                 </div>
             `);
         }
-        
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1500);<\/script></body></html>`);
     }
 
-function updateChartUI(present, absent) {
-        // 1. Dapatkan nilai sebenar dan kira peratusan
+    function updateChartUI(present, absent) {
         const actualAbsent = absent < 0 ? 0 : absent;
         const total = present + actualAbsent;
         let percentage = 0;
         
         if (total > 0) {
-            percentage = ((present / total) * 100).toFixed(1); // Peratusan dengan 1 titik perpuluhan (Cth: 95.5%)
+            percentage = ((present / total) * 100).toFixed(1);
         }
 
         const ctx = document.getElementById('attendanceChart').getContext('2d');
@@ -806,7 +739,6 @@ function updateChartUI(present, absent) {
             options: { cutout: '75%', plugins: { legend: { display: false } } }
         });
         
-        // 2. Kemas kini paparan Legend beserta Peratusan
         document.getElementById('chartLegend').innerHTML = `
             <div style="font-size:1.2rem; font-weight:800; color:#1e293b; margin-bottom:8px;">
                 Peratus Hadir: ${percentage}%
@@ -842,7 +774,7 @@ function updateChartUI(present, absent) {
         list.forEach(s => ns.innerHTML += `<option value="${s.name}">${s.name}</option>`);
     }
 
-function downloadTemplate() {
+    function downloadTemplate() {
         const csvContent = "data:text/csv;charset=utf-8,ID MURID,NAMA MURID,KELAS\n070101012233,ALI BIN AHMAD,1 CEMERLANG\n070202024455,SITI BINTI ABU,1 BESTARI";
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent));
@@ -850,27 +782,21 @@ function downloadTemplate() {
         link.click();
     }
 
-    // 1. FUNGSI UNTUK MENUNJUKKAN/MENYEMBUNYIKAN COPMONENT BULAN
     function toggleAnalysisUI() {
         const mode = document.getElementById('analysisMode').value;
         const monthContainer = document.getElementById('monthFilterContainer');
         
         if (mode === 'monthly') {
             monthContainer.style.display = 'block';
-            // Set laluan automatik ke bulan semasa jika mahu
             const currentMonth = String(new Date().getMonth() + 1).padStart(2, '0');
             document.getElementById('monthFilter').value = currentMonth;
         } else {
             monthContainer.style.display = 'none';
         }
-        
-        // Jalankan pengiraan analisis baharu
         processAttendanceAnalysis();
     }
 
-    // 2. FUNGSI UTAMA MENGIRA DATA HADIR & TIADA HADIR
-function processAttendanceAnalysis() {
-        // Ambil elemen UI dengan selamat
+    function processAttendanceAnalysis() {
         const modeEl = document.getElementById('analysisMode');
         const yearFilterEl = document.getElementById('yearFilter');
         const monthFilterEl = document.getElementById('monthFilter');
@@ -878,26 +804,24 @@ function processAttendanceAnalysis() {
         const mode = modeEl ? modeEl.value : 'daily';
         const selectedYear = yearFilterEl ? yearFilterEl.value : new Date().getFullYear().toString();
         const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
-        const today = new Date().toLocaleDateString('en-GB'); // DD/MM/YYYY
+        const today = new Date().toLocaleDateString('en-GB'); 
 
-        // PENTING: Jika data belum siap dimuat turun, jangan crash, tunggu dulu.
         if (!window.globalLogs) return; 
         
-        // Elakkan crash jika globalStudents belum sedia
         let totalExpected = window.globalStudents ? globalStudents.length : 242; 
-        if (totalExpected === 0) totalExpected = 242; // Sandaran saiz sekolah anda
+        if (totalExpected === 0) totalExpected = 242; 
 
         let filteredLogs = [];
 
         if (mode === 'daily') {
-            filteredLogs = globalLogs.filter(l => l.date === today);
+            filteredLogs = globalLogs.filter(l => l && l.date === today);
             const presentCount = filteredLogs.length;
             const absentCount = totalExpected - presentCount;
             updateChartUI(presentCount, absentCount);
 
         } else if (mode === 'monthly') {
             filteredLogs = globalLogs.filter(l => {
-                if(!l.date) return false;
+                if(!l || !l.date) return false;
                 const parts = l.date.split('/'); 
                 return parts[1] === selectedMonth && parts[2] === selectedYear;
             });
@@ -908,7 +832,7 @@ function processAttendanceAnalysis() {
             updateChartUI(presentCount, absentCount);
 
         } else if (mode === 'history') {
-            filteredLogs = globalLogs.filter(l => l.date && l.date.split('/')[2] === selectedYear);
+            filteredLogs = globalLogs.filter(l => l && l.date && l.date.split('/')[2] === selectedYear);
             const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
             const totalExpectedHistory = totalExpected * (uniqueDays || 1);
             const presentCount = filteredLogs.length;
@@ -916,13 +840,16 @@ function processAttendanceAnalysis() {
             updateChartUI(presentCount, absentCount);
         }
 
-        // Susun log mengikut tarikh dan masa terkini
+        // Sistem Penyusunan Selamat (Anti-Crash Fallback)
         const sortedLogs = filteredLogs.sort((a, b) => {
-            if(a.date !== b.date) return b.date.localeCompare(a.date);
-            return b.time.localeCompare(a.time);
+            const dateA = a.date || '';
+            const dateB = b.date || '';
+            if(dateA !== dateB) return dateB.localeCompare(dateA);
+            const timeA = a.time || '';
+            const timeB = b.time || '';
+            return timeB.localeCompare(timeA);
         });
         
-        // Hantar ke jadual
         renderReport(sortedLogs);
     }
 </script>
