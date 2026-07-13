@@ -758,18 +758,39 @@ async function importCSVToCloud(event) {
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1500);<\/script></body></html>`);
     }
 
-    function updateChartUI(present, absent) {
+function updateChartUI(present, absent) {
+        // 1. Dapatkan nilai sebenar dan kira peratusan
+        const actualAbsent = absent < 0 ? 0 : absent;
+        const total = present + actualAbsent;
+        let percentage = 0;
+        
+        if (total > 0) {
+            percentage = ((present / total) * 100).toFixed(1); // Peratusan dengan 1 titik perpuluhan (Cth: 95.5%)
+        }
+
         const ctx = document.getElementById('attendanceChart').getContext('2d');
         if (myChart) myChart.destroy();
         myChart = new Chart(ctx, {
             type: 'doughnut',
             data: {
                 labels: ['Hadir', 'Tidak Hadir'],
-                datasets: [{ data: [present, absent < 0 ? 0 : absent], backgroundColor: ['#10b981', '#e2e8f0'], borderWidth: 0 }]
+                datasets: [{ 
+                    data: [present, actualAbsent], 
+                    backgroundColor: ['#10b981', '#e2e8f0'], 
+                    borderWidth: 0 
+                }]
             },
             options: { cutout: '75%', plugins: { legend: { display: false } } }
         });
-        document.getElementById('chartLegend').innerHTML = `<span style="color:#10b981">● Hadir: ${present}</span> &nbsp;&nbsp; <span style="color:#94a3b8">● Tiada: ${absent<0?0:absent}</span>`;
+        
+        // 2. Kemas kini paparan Legend beserta Peratusan
+        document.getElementById('chartLegend').innerHTML = `
+            <div style="font-size:1.2rem; font-weight:800; color:#1e293b; margin-bottom:8px;">
+                Peratus Hadir: ${percentage}%
+            </div>
+            <span style="color:#10b981; font-weight:bold;">● Hadir: ${present}</span> &nbsp;&nbsp; 
+            <span style="color:#94a3b8; font-weight:bold;">● Tidak Hadir: ${actualAbsent}</span>
+        `;
     }
 
     function exportExcel() {
