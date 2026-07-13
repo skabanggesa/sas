@@ -59,7 +59,8 @@
         
         try {
             // Semak nama murid dalam koleksi "students"
-            const q = await db.collection("students").where("name", "==", studentName).get();
+            const studentId = decodedText.trim(); 
+            const q = await db.collection("students").where("id", "==", studentId).get();
             
             if (!q.empty) {
                 const s = q.docs[0].data();
