@@ -169,7 +169,7 @@
             </div>
         </div>
 
-        <div class="card" style="border-left: 5px solid var(--danger);">
+<div class="card" style="border-left: 5px solid var(--danger);">
             <div class="card-header">
                 <h2>Senarai Murid Tidak Hadir (Hari Ini)</h2>
                 <div style="display:flex; gap:10px; align-items: center;">
@@ -179,7 +179,7 @@
             </div>
             <div class="table-container">
                 <table id="absentTable" style="display:none;">
-                    <thead><tr><th>Bil</th><th>Nama Murid</th><th>Status</th></tr></thead>
+                    <thead><tr><th>Bil</th><th>Nama Murid</th><th>Status</th><th style="text-align:right">Tindakan</th></tr></thead>
                     <tbody id="absentBody"></tbody>
                 </table>
                 <p id="absentMessage" style="text-align:center; padding: 20px; font-weight:bold; color: var(--secondary);">
@@ -187,7 +187,7 @@
                 </p>
             </div>
         </div>
-
+        
         <div class="card">
             <div class="card-header">
                 <h2>Log Kehadiran Keseluruhan</h2>
@@ -498,6 +498,89 @@ async function importCSVToCloud(event) {
             absentBody.innerHTML = absentStudents.sort((a,b) => a.name.localeCompare(b.name)).map((s, i) => 
                 `<tr><td>${i+1}</td><td><b>${s.name}</b></td><td><span class="badge badge-red">Tiada Rekod</span></td></tr>`
             ).join('');
+        }
+    }
+
+    // FUNGSI SENARAI TIDAK HADIR (DIKEMASKINI DENGAN BUTANG MANUAL)
+    function renderAbsentList() {
+        const selectedClass = document.getElementById('absentClassSelect').value;
+        const absentTable = document.getElementById('absentTable');
+        const absentMessage = document.getElementById('absentMessage');
+        const absentBody = document.getElementById('absentBody');
+
+        if(!selectedClass) {
+            absentTable.style.display = 'none';
+            absentMessage.style.display = 'block';
+            absentMessage.innerHTML = "Sila pilih kelas untuk menyemak senarai tidak hadir.";
+            absentMessage.style.color = "var(--secondary)";
+            return;
+        }
+
+        const today = new Date().toLocaleDateString('en-GB');
+        
+        // Dapatkan semua murid dalam kelas yang dipilih
+        const studentsInClass = globalStudents.filter(s => s.class === selectedClass);
+        // Dapatkan semua rekod kehadiran untuk kelas yang dipilih pada HARI INI
+        const presentLogs = globalLogs.filter(l => l.date === today && l.class === selectedClass);
+        // Tukar pencarian kepada ID untuk lebih tepat
+        const presentIds = presentLogs.map(l => l.id); 
+
+        // Cari murid yang ID-NYA TIADA dalam log hari ini
+        const absentStudents = studentsInClass.filter(s => !presentIds.includes(s.id));
+
+        if(studentsInClass.length === 0) {
+            absentTable.style.display = 'none';
+            absentMessage.style.display = 'block';
+            absentMessage.innerHTML = "Tiada murid didaftarkan dalam kelas ini.";
+            absentMessage.style.color = "var(--secondary)";
+        } else if(absentStudents.length === 0) {
+            absentTable.style.display = 'none';
+            absentMessage.style.display = 'block';
+            absentMessage.innerHTML = "🎉 TAHNIAH! Semua murid hadir penuh hari ini.";
+            absentMessage.style.color = "var(--success)";
+        } else {
+            absentTable.style.display = 'table';
+            absentMessage.style.display = 'none';
+            
+            // Masukkan Butang Tanda Hadir pada jadual
+            absentBody.innerHTML = absentStudents.sort((a,b) => a.name.localeCompare(b.name)).map((s, i) => 
+                `<tr>
+                    <td>${i+1}</td>
+                    <td><b>${s.name}</b></td>
+                    <td><span class="badge badge-red">Tiada Rekod</span></td>
+                    <td style="text-align:right">
+                        <button class="btn btn-success" style="padding:6px 12px; font-size:0.75rem;" onclick="markAttendanceManual('${s.id}', '${s.name}', '${s.class}')">✔️ Tanda Hadir</button>
+                    </td>
+                </tr>`
+            ).join('');
+        }
+    }
+
+    // FUNGSI BAHARU: REKOD KEHADIRAN MANUAL
+    async function markAttendanceManual(studentId, studentName, studentClass) {
+        if(confirm(`Sahkan kehadiran manual untuk ${studentName}?`)) {
+            try {
+                const hariIni = new Date().toLocaleDateString('en-GB');
+
+                // Simpan data log kehadiran ke Firebase
+                await db.collection("logs").add({
+                    id: studentId,
+                    name: studentName,
+                    class: studentClass,
+                    date: hariIni,
+                    time: new Date().toLocaleTimeString('en-GB', {hour12: false}),
+                    status: "HADIR",
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                });
+
+                alert(`✅ Kehadiran ${studentName} berjaya direkodkan secara manual!`);
+                // Nota: Senarai tidak hadir akan automatik dikemaskini dan nama murid akan hilang dari senarai 
+                // kerana fungsi startRealtimeSync() kita sedang berjalan di latar belakang.
+
+            } catch (err) {
+                console.error(err);
+                alert("❌ Ralat berlaku semasa merekod kehadiran manual: " + err.message);
+            }
         }
     }
 
