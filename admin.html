@@ -317,17 +317,17 @@
             globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             syncDropdowns();
             renderStudentsTable();
-            renderAbsentList(); 
-            renderClassSummary(); // Kemas kini jadual ringkasan harian
-            processAttendanceAnalysis();
+            if(globalLogs.length > 0) {
+                renderAbsentList(); 
+                processAttendanceAnalysis(); // Panggil analisis untuk mengemas kini data apabila pelajar berubah
+            }
         });
 
         db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
             globalLogs = snapshot.docs.map(doc => doc.data());
             setupYearFilter();
             renderAbsentList(); 
-            renderClassSummary(); // Kemas kini jadual ringkasan harian
-            processAttendanceAnalysis();
+            processAttendanceAnalysis(); // Fungsi ini akan menguruskan cetakan log dan carta dengan betul
         });
     }
 
@@ -346,6 +346,7 @@
 
             for (let line of lines) {
                 const parts = line.split(',');
+                
                 if(parts.length >= 3) {
                     const idMurid = parts[0].trim();
                     const name = parts[1].trim().toUpperCase();
@@ -354,7 +355,12 @@
                     if (!idMurid || !name || !className) continue;
 
                     const studentRef = db.collection("students").doc(idMurid);
-                    batch.set(studentRef, { id: idMurid, name: name, class: className });
+                    
+                    batch.set(studentRef, {
+                        id: idMurid,
+                        name: name,
+                        class: className
+                    });
 
                     counter++;
                     totalImported++;
@@ -367,7 +373,10 @@
                 }
             }
 
-            if (counter > 0) await batch.commit();
+            if (counter > 0) {
+                await batch.commit();
+            }
+
             alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud.`);
         };
         reader.readAsText(file);
@@ -426,7 +435,6 @@
         
         filters.forEach(id => {
             const el = document.getElementById(id);
-            if(!el) return;
             const currentVal = el.value;
             if(id === 'classFilter') el.innerHTML = '<option value="SEMUA">Semua Kelas</option>';
             else el.innerHTML = '<option value="">-- Pilih Kelas --</option>';
@@ -446,48 +454,15 @@
             <button class="btn btn-danger" style="padding:4px 8px" onclick="deleteStudentCloud('${s.id}')">×</button></td></tr>`).join('');
     }
 
-    // FUNGSI BARU: MENGIRA & MEMAPARKAN JADUAL RINGKASAN HARIAN MENGIKUT KELAS
-    function renderClassSummary() {
-        const summaryBody = document.getElementById('classSummaryBody');
-        if(!summaryBody) return;
-
-        const today = new Date().toLocaleDateString('en-GB');
-        const todayLogs = globalLogs.filter(l => l && l.date === today);
-        const classes = [...new Set(globalStudents.map(s => s.class))].sort();
-
-        if(classes.length === 0) {
-            summaryBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:15px; color:var(--secondary);">Tiada data murid dimuat naik.</td></tr>`;
-            return;
-        }
-
-        summaryBody.innerHTML = classes.map(className => {
-            const enrolmen = globalStudents.filter(s => s.class === className).length;
-            const hadir = todayLogs.filter(l => l.class === className).length;
-            const peratus = enrolmen > 0 ? ((hadir / enrolmen) * 100).toFixed(1) : 0;
-
-            return `
-                <tr>
-                    <td><b>${className}</b></td>
-                    <td>${enrolmen}</td>
-                    <td><span class="badge badge-green">${hadir}</span></td>
-                    <td><b>${peratus}%</b></td>
-                </tr>
-            `;
-        }).join('');
-    }
-
     function renderReport(logsToShow) {
         const reportBody = document.getElementById('reportBody');
-        if(!reportBody) return;
         
-        const dataToRender = logsToShow || [];
-
-        if(dataToRender.length === 0) {
+        if(!logsToShow || logsToShow.length === 0) {
             reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran ditemui untuk tetapan penapis ini.</td></tr>`;
             return;
         }
 
-        reportBody.innerHTML = dataToRender.map(l => `
+        reportBody.innerHTML = logsToShow.map(l => `
             <tr>
                 <td>${l.date || '-'}</td>
                 <td><span class="badge badge-blue">${l.time || '-'}</span></td>
@@ -721,7 +696,7 @@
         let percentage = 0;
         
         if (total > 0) {
-            percentage = ((present / total) * 100).toFixed(1);
+            percentage = ((present / total) * 100).toFixed(1); 
         }
 
         const ctx = document.getElementById('attendanceChart').getContext('2d');
@@ -806,10 +781,10 @@
         const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
         const today = new Date().toLocaleDateString('en-GB'); 
 
-        if (!window.globalLogs) return; 
+        // Pembetulan: Akses terus kepada pembolehubah global scope (buang prefix window.)
+        if (!globalLogs || globalLogs.length === 0) return; 
         
-        let totalExpected = window.globalStudents ? globalStudents.length : 242; 
-        if (totalExpected === 0) totalExpected = 242; 
+        let totalExpected = globalStudents && globalStudents.length > 0 ? globalStudents.length : 242; 
 
         let filteredLogs = [];
 
@@ -840,7 +815,7 @@
             updateChartUI(presentCount, absentCount);
         }
 
-        // Sistem Penyusunan Selamat (Anti-Crash Fallback)
+        // Pembetulan: Susunan yang selamat (tidak akan crash sekiranya ada data kosong)
         const sortedLogs = filteredLogs.sort((a, b) => {
             const dateA = a.date || '';
             const dateB = b.date || '';
