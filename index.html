@@ -73,6 +73,15 @@
         if (isProcessing || decodedText === lastScanned) return;
         
         isProcessing = true;
+
+                        // Mainkan bunyi Beep selepas kebenaran browser diberikan
+                try {
+            const beepSound = document.getElementById('beep');
+            beepSound.currentTime = 0; // Reset ke saat 0 supaya boleh bunyi pantas berturut-turut
+            beepSound.play();
+        } catch(e) {
+            console.log("Audio disekat browser. Sila klik banner atas terlebih dahulu.");
+        }
         const scannedText = decodedText.trim().toUpperCase(); 
         const statusDiv = document.getElementById('status');
         
@@ -118,13 +127,6 @@
                         lastScanned = "";
                     }, 3000);
                     return; // Menyekat log baharu daripada disimpan semula
-                }
-
-                // Mainkan bunyi Beep selepas kebenaran browser diberikan
-                try {
-                    document.getElementById('beep').play();
-                } catch(e) {
-                    console.log("Audio disekat browser. Sila klik banner atas terlebih dahulu.");
                 }
                 
                 // Simpan log kehadiran unik ke koleksi "logs"
