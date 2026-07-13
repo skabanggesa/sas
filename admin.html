@@ -70,7 +70,7 @@
         th { background: #f8fafc; color: var(--secondary); font-size: 0.75rem; text-transform: uppercase; padding: 12px 15px; text-align: left; border-bottom: 2px solid #f1f5f9; }
         td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; font-size: 0.9rem; }
         
-        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7 your; font-weight: 700; }
+        .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
         .badge-green { background: #d1fae5; color: #065f46; }
         .badge-red { background: #fee2e2; color: #991b1b; }
 
@@ -83,6 +83,9 @@
         @media (max-width: 768px) { .analysis-grid { grid-template-columns: 1fr; } }
 
         select { padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); outline: none; }
+
+        /* ROLE CONTROL: Sembunyikan elemen admin apabila ID guru digunakan */
+        .role-teacher .admin-only { display: none !important; }
     </style>
 </head>
 <body>
@@ -93,8 +96,8 @@
     <div class="login-card">
         <img src="sas.png" alt="Logo" style="height:70px; margin-bottom:15px;" onerror="this.style.display='none'">
         <h2 style="margin-bottom:5px;">Sistem Kehadiran Murid</h2>
-        <p style="color:#64748b; font-size:0.85rem; margin-bottom:20px;">Sila log masuk (Pentadbir)</p>
-        <input type="email" id="userEmail" placeholder="Emel Pentadbir">
+        <p style="color:#64748b; font-size:0.85rem; margin-bottom:20px;">Sila log masuk ke sistem</p>
+        <input type="email" id="userEmail" placeholder="Emel Pengguna / Guru">
         <input type="password" id="userPass" placeholder="Kata Laluan">
         <button onclick="handleFirebaseLogin()" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;">Log Masuk Cloud</button>
     </div>
@@ -106,19 +109,19 @@
         <h1>SMP Pro <span style="font-weight:400; color:#94a3b8">| Sistem Pengurusan Kehadiran Sekolah</span></h1>
     </div>
     <div style="display:flex; gap:10px;">
-        <button class="btn btn-outline" onclick="backupSistem()">💾 Backup Data</button>
+        <button class="btn btn-outline admin-only" onclick="backupSistem()">💾 Backup Data</button>
         <button onclick="handleLogout()" class="btn btn-danger" style="padding: 8px 12px;">Log Keluar</button>
     </div>
 </div>
 
 <div class="main-container">
     <div class="nav-tabs">
-        <button onclick="openTab('m-data')" id="tab-data" class="active">👥 Data Murid</button>
-        <button onclick="openTab('m-qr')" id="tab-qr">🖨️ Cetakan QR</button>
+        <button onclick="openTab('m-data')" id="tab-data" class="active admin-only">👥 Data Murid</button>
         <button onclick="openTab('m-report')" id="tab-report">📊 Analisis & Log</button>
+        <button onclick="openTab('m-qr')" id="tab-qr">🖨️ Cetakan QR</button>
     </div>
 
-    <div id="m-data" class="section active-section">
+    <div id="m-data" class="section active-section admin-only">
         <div class="card">
             <div class="card-header">
                 <h2>Senarai Induk Murid (Cloud Database)</h2>
@@ -147,6 +150,60 @@
         </div>
     </div>
 
+    <div id="m-report" class="section">
+        <div class="analysis-grid">
+            <div class="card">
+                <div class="card-header"><h2>Ringkasan Kehadiran Hari Ini</h2></div>
+                <div class="table-container" style="max-height: 250px; overflow-y: auto;">
+                    <table>
+                        <thead><tr><th>Kelas</th><th>Enrolmen</th><th>Hadir</th><th>%</th></tr></thead>
+                        <tbody id="classSummaryBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card">
+                <div class="card-header"><h2>Statistik Keseluruhan</h2></div>
+                <canvas id="attendanceChart" style="max-height: 200px;"></canvas>
+                <div id="chartLegend" style="text-align:center; margin-top:15px; font-size:0.85rem; font-weight:600;"></div>
+            </div>
+        </div>
+
+        <div class="card" style="border-left: 5px solid var(--danger);">
+            <div class="card-header">
+                <h2>Senarai Murid Tidak Hadir (Hari Ini)</h2>
+                <div style="display:flex; gap:10px; align-items: center;">
+                    <label style="font-size:0.85rem; font-weight:600;">Pilih Kelas:</label>
+                    <select id="absentClassSelect" onchange="renderAbsentList()"></select>
+                </div>
+            </div>
+            <div class="table-container">
+                <table id="absentTable" style="display:none;">
+                    <thead><tr><th>Bil</th><th>Nama Murid</th><th>Status</th></tr></thead>
+                    <tbody id="absentBody"></tbody>
+                </table>
+                <p id="absentMessage" style="text-align:center; padding: 20px; font-weight:bold; color: var(--secondary);">
+                    Sila pilih kelas untuk menyemak.
+                </p>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <h2>Log Kehadiran Keseluruhan</h2>
+                <div style="display:flex; gap:10px;">
+                    <select id="yearFilter" onchange="renderReport()"></select>
+                    <button class="btn btn-success" onclick="exportExcel()">📊 Eksport Excel</button>
+                </div>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead><tr><th>Tarikh</th><th>Masa</th><th>Nama Murid</th><th>Kelas</th></tr></thead>
+                    <tbody id="reportBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div id="m-qr" class="section">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
             <div class="card">
@@ -168,44 +225,10 @@
                 </div>
             </div>
         </div>
-        <div class="card" style="border-top: 4px solid var(--warning);">
+        <div class="card admin-only" style="border-top: 4px solid var(--warning);">
             <div class="card-header"><h2>Cetakan Pukal (Satu Sekolah)</h2></div>
             <p style="font-size:0.9rem; color:var(--secondary);">Gunakan fungsi ini hanya untuk persediaan awal tahun atau cetakan besar-besaran.</p>
             <button class="btn btn-primary" style="background:var(--warning); width:100%; justify-content:center" onclick="printBulk()">Jana Semua QR & Cetak</button>
-        </div>
-    </div>
-
-    <div id="m-report" class="section">
-        <div class="analysis-grid">
-            <div class="card">
-                <div class="card-header"><h2>Ringkasan Kehadiran Hari Ini</h2></div>
-                <div class="table-container">
-                    <table>
-                        <thead><tr><th>Kelas</th><th>Enrolmen</th><th>Hadir</th><th>%</th></tr></thead>
-                        <tbody id="classSummaryBody"></tbody>
-                    </table>
-                </div>
-            </div>
-            <div class="card">
-                <div class="card-header"><h2>Statistik Keseluruhan</h2></div>
-                <canvas id="attendanceChart" style="max-height: 250px;"></canvas>
-                <div id="chartLegend" style="text-align:center; margin-top:15px; font-size:0.85rem; font-weight:600;"></div>
-            </div>
-        </div>
-        <div class="card">
-            <div class="card-header">
-                <h2>Log Kehadiran Cloud</h2>
-                <div style="display:flex; gap:10px;">
-                    <select id="yearFilter" onchange="renderReport()"></select>
-                    <button class="btn btn-success" onclick="exportExcel()">📊 Eksport Excel</button>
-                </div>
-            </div>
-            <div class="table-container">
-                <table>
-                    <thead><tr><th>Tarikh</th><th>Masa</th><th>Nama Murid</th><th>Kelas</th></tr></thead>
-                    <tbody id="reportBody"></tbody>
-                </table>
-            </div>
         </div>
     </div>
 </div>
@@ -230,8 +253,9 @@
     let globalStudents = [];
     let globalLogs = [];
     let myChart = null;
+    let userRole = 'admin'; // Lalai: admin
 
-    // --- 1. FIREBASE AUTHENTICATION ---
+    // --- 1. FIREBASE AUTHENTICATION & ROLE MANAGEMENT ---
     function handleFirebaseLogin() {
         const email = document.getElementById('userEmail').value;
         const pass = document.getElementById('userPass').value;
@@ -240,6 +264,19 @@
 
         auth.signInWithEmailAndPassword(email, pass)
             .then((userCredential) => {
+                const loggedInEmail = userCredential.user.email.toLowerCase();
+                
+                // Semak jika emel ini ialah ID Guru
+                if(loggedInEmail === "guru@sas.edu.my") {
+                    userRole = 'teacher';
+                    document.body.classList.add('role-teacher');
+                    openTab('m-report'); // Guru terus masuk ke tab Analisis
+                } else {
+                    userRole = 'admin';
+                    document.body.classList.remove('role-teacher');
+                    openTab('m-data'); // Admin masuk ke tab Data Murid
+                }
+
                 document.getElementById('login-overlay').style.display = 'none';
                 startRealtimeSync(); 
             })
@@ -256,24 +293,28 @@
             globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             syncDropdowns();
             renderStudentsTable();
-            if(globalLogs.length > 0) renderReport(); 
+            if(globalLogs.length > 0) {
+                renderReport(); 
+                renderAbsentList(); // Kemas kini senarai tak hadir secara live
+            }
         });
 
         db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
             globalLogs = snapshot.docs.map(doc => doc.data());
             setupYearFilter();
             renderReport();
+            renderAbsentList(); // Kemas kini senarai tak hadir secara live
         });
     }
 
-    // --- 3. DATA MANAGEMENT (CLOUD VERSION - DIKEMASKINI) ---
+    // --- 3. DATA MANAGEMENT (CLOUD VERSION) ---
     async function importCSVToCloud(event) {
         const file = event.target.files[0];
         if(!file) return;
 
         const reader = new FileReader();
         reader.onload = async (e) => {
-            const lines = e.target.result.split('\n').slice(1); // Buang header CSV
+            const lines = e.target.result.split('\n').slice(1); 
             
             let batch = db.batch(); 
             let counter = 0;
@@ -287,8 +328,6 @@
 
                     if (!name || !className) continue;
 
-                    // Bina ID dokumen unik daripada nama (buang simbol/jarak khas)
-                    // Mengelakkan duplikat jika fail dimuat naik semula
                     const customDocId = name.replace(/[^A-Z0-9]/g, "_");
                     const studentRef = db.collection("students").doc(customDocId);
                     
@@ -300,7 +339,6 @@
                     counter++;
                     totalImported++;
 
-                    // Had batch Firestore = 500. Commit setiap 400 rekod demi keselamatan.
                     if (counter === 400) {
                         await batch.commit();
                         batch = db.batch();
@@ -309,12 +347,8 @@
                 }
             }
 
-            // Commit baki data yang tertinggal
-            if (counter > 0) {
-                await batch.commit();
-            }
-
-            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud Firestore tanpa sebarang duplikat.`);
+            if (counter > 0) { await batch.commit(); }
+            alert(`Berjaya! ${totalImported} data murid telah dikemas kini ke Cloud tanpa duplikat.`);
         };
         reader.readAsText(file);
     }
@@ -365,15 +399,17 @@
         alert(`Berjaya memproses ${count} murid.`);
     }
 
-    // --- 4. UI & REPORT LOGIC ---
+    // --- 4. UI, REPORT & ABSENT LOGIC ---
     function syncDropdowns() {
         const classes = [...new Set(globalStudents.map(s => s.class))].sort();
-        const filters = ['classFilter', 'qrClassSelect', 'printByClassSelect'];
+        const filters = ['classFilter', 'qrClassSelect', 'printByClassSelect', 'absentClassSelect'];
         
         filters.forEach(id => {
             const el = document.getElementById(id);
             const currentVal = el.value;
-            el.innerHTML = id === 'classFilter' ? '<option value="SEMUA">Semua Kelas</option>' : '<option value="">-- Pilih Kelas --</option>';
+            if(id === 'classFilter') el.innerHTML = '<option value="SEMUA">Semua Kelas</option>';
+            else el.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+            
             classes.forEach(c => el.innerHTML += `<option value="${c}">${c}</option>`);
             el.value = currentVal;
         });
@@ -409,6 +445,52 @@
             `<tr><td>${l.date}</td><td>${l.time}</td><td>${l.name}</td><td>${l.class}</td></tr>`).join('');
 
         updateChartUI(todayLogs.length, globalStudents.length - todayLogs.length);
+    }
+
+    // FUNGSI SENARAI TIDAK HADIR
+    function renderAbsentList() {
+        const selectedClass = document.getElementById('absentClassSelect').value;
+        const absentTable = document.getElementById('absentTable');
+        const absentMessage = document.getElementById('absentMessage');
+        const absentBody = document.getElementById('absentBody');
+
+        if(!selectedClass) {
+            absentTable.style.display = 'none';
+            absentMessage.style.display = 'block';
+            absentMessage.innerHTML = "Sila pilih kelas untuk menyemak senarai tidak hadir.";
+            absentMessage.style.color = "var(--secondary)";
+            return;
+        }
+
+        const today = new Date().toLocaleDateString('en-GB');
+        
+        // Dapatkan semua murid dalam kelas yang dipilih
+        const studentsInClass = globalStudents.filter(s => s.class === selectedClass);
+        // Dapatkan semua rekod kehadiran untuk kelas yang dipilih pada HARI INI
+        const presentLogs = globalLogs.filter(l => l.date === today && l.class === selectedClass);
+        const presentNames = presentLogs.map(l => l.name);
+
+        // Cari murid yang NAMANYA TIADA dalam log hari ini
+        const absentStudents = studentsInClass.filter(s => !presentNames.includes(s.name));
+
+        if(studentsInClass.length === 0) {
+            absentTable.style.display = 'none';
+            absentMessage.style.display = 'block';
+            absentMessage.innerHTML = "Tiada murid didaftarkan dalam kelas ini.";
+            absentMessage.style.color = "var(--secondary)";
+        } else if(absentStudents.length === 0) {
+            absentTable.style.display = 'none';
+            absentMessage.style.display = 'block';
+            absentMessage.innerHTML = "🎉 TAHNIAH! Semua murid hadir penuh hari ini.";
+            absentMessage.style.color = "var(--success)";
+        } else {
+            absentTable.style.display = 'table';
+            absentMessage.style.display = 'none';
+            
+            absentBody.innerHTML = absentStudents.sort((a,b) => a.name.localeCompare(b.name)).map((s, i) => 
+                `<tr><td>${i+1}</td><td><b>${s.name}</b></td><td><span class="badge badge-red">Tiada Rekod</span></td></tr>`
+            ).join('');
+        }
     }
 
     function setupYearFilter() {
