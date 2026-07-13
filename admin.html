@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Pengurusan RMT | Dashboard Pentadbir Cloud</title>
+    <title>Sistem Pengurusan Kehadiran | Dashboard Pentadbir Cloud</title>
     
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -91,9 +91,9 @@
 
 <div id="login-overlay">
     <div class="login-card">
-        <img src="smp.png" alt="Logo" style="height:70px; margin-bottom:15px;">
-        <h2 style="margin-bottom:5px;">Portal Cloud SMP Pro</h2>
-        <p style="color:#64748b; font-size:0.85rem; margin-bottom:20px;">Sila log masuk</p>
+        <img src="smp.png" alt="Logo" style="height:70px; margin-bottom:15px;" onerror="this.style.display='none'">
+        <h2 style="margin-bottom:5px;">Sistem Kehadiran Murid</h2>
+        <p style="color:#64748b; font-size:0.85rem; margin-bottom:20px;">Sila log masuk (Pentadbir)</p>
         <input type="email" id="userEmail" placeholder="Emel Pentadbir">
         <input type="password" id="userPass" placeholder="Kata Laluan">
         <button onclick="handleFirebaseLogin()" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:10px;">Log Masuk Cloud</button>
@@ -102,11 +102,11 @@
 
 <div class="top-bar">
     <div class="brand">
-        <img src="smp.png" alt="Logo">
-        <h1>SMP Pro <span style="font-weight:400; color:#94a3b8">| Sistem Pengurusan Rancangan Makanan Tambahan</span></h1>
+        <img src="smp.png" alt="Logo" onerror="this.style.display='none'">
+        <h1>SMP Pro <span style="font-weight:400; color:#94a3b8">| Sistem Pengurusan Kehadiran Sekolah</span></h1>
     </div>
     <div style="display:flex; gap:10px;">
-        <button class="btn btn-outline" onclick="backupSistem()">💾 Backup Lokasi</button>
+        <button class="btn btn-outline" onclick="backupSistem()">💾 Backup Data</button>
         <button onclick="handleLogout()" class="btn btn-danger" style="padding: 8px 12px;">Log Keluar</button>
     </div>
 </div>
@@ -150,7 +150,7 @@
     <div id="m-qr" class="section">
         <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
             <div class="card">
-                <div class="card-header"><h2>Gantian Individu</h2></div>
+                <div class="card-header"><h2>Gantian Kad Individu</h2></div>
                 <div style="display:flex; flex-direction:column; gap:12px;">
                     <label style="font-size:0.85rem;">Pilih Kelas & Nama:</label>
                     <select id="qrClassSelect" onchange="updateQRNameDropdown()"></select>
@@ -226,7 +226,7 @@
     const db = firebase.firestore();
     const auth = firebase.auth();
 
-    // Variable Global (Data disimpan sementara dari Cloud)
+    // Variable Global
     let globalStudents = [];
     let globalLogs = [];
     let myChart = null;
@@ -241,7 +241,7 @@
         auth.signInWithEmailAndPassword(email, pass)
             .then((userCredential) => {
                 document.getElementById('login-overlay').style.display = 'none';
-                startRealtimeSync(); // Mula ambil data secara live
+                startRealtimeSync(); 
             })
             .catch((error) => alert("Ralat Log Masuk: " + error.message));
     }
@@ -252,15 +252,13 @@
 
     // --- 2. DATA SYNC (LIVE UPDATES) ---
     function startRealtimeSync() {
-        // Listen to Students Collection
         db.collection("students").onSnapshot(snapshot => {
             globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             syncDropdowns();
             renderStudentsTable();
-            if(globalLogs.length > 0) renderReport(); // Update report if logs exist
+            if(globalLogs.length > 0) renderReport(); 
         });
 
-        // Listen to Logs Collection
         db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
             globalLogs = snapshot.docs.map(doc => doc.data());
             setupYearFilter();
@@ -276,7 +274,7 @@
         const reader = new FileReader();
         reader.onload = async (e) => {
             const lines = e.target.result.split('\n').slice(1);
-            const batch = db.batch(); // Gunakan batch untuk kelajuan
+            const batch = db.batch(); 
 
             lines.forEach(line => {
                 const parts = line.split(',');
@@ -306,12 +304,10 @@
         const confirmText = prompt("Taip 'PADAM SEMUA' untuk sahkan.");
         if(confirmText !== "PADAM SEMUA") return alert("Tindakan dibatalkan.");
 
-        // Padam Students
         const students = await db.collection("students").get();
         const batch = db.batch();
         students.forEach(doc => batch.delete(doc.ref));
         
-        // Padam Logs
         const logs = await db.collection("logs").get();
         logs.forEach(doc => batch.delete(doc.ref));
 
@@ -343,7 +339,7 @@
         alert(`Berjaya memproses ${count} murid.`);
     }
 
-    // --- 4. UI & REPORT LOGIC (AMBIL DARI GLOBAL VARIABLES) ---
+    // --- 4. UI & REPORT LOGIC ---
     function syncDropdowns() {
         const classes = [...new Set(globalStudents.map(s => s.class))].sort();
         const filters = ['classFilter', 'qrClassSelect', 'printByClassSelect'];
@@ -400,7 +396,7 @@
         if(current) yf.value = current;
     }
 
-    // --- 5. PRINTING & OTHERS (LOGIK ASAL DIKEKALKAN) ---
+    // --- 5. PRINTING & OTHERS ---
     function openTab(id) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
         document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
@@ -434,7 +430,7 @@
         if(!target) return alert("Pilih kelas!");
         const list = globalStudents.filter(s => s.class === target).sort((a,b) => a.name.localeCompare(b.name));
         const win = window.open('', '', 'width=800,height=1000');
-        win.document.write(`<html><head><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;font-family:sans-serif;} .card{border:1px solid #ccc;padding:10px;text-align:center;page-break-inside:avoid;} img{width:100px;} p{font-size:0.7rem;font-weight:bold;text-transform:uppercase;}</style></head><body><h2 style="text-align:center">KAD RMT: ${target}</h2><div class="grid">`);
+        win.document.write(`<html><head><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;font-family:sans-serif;} .card{border:1px solid #ccc;padding:10px;text-align:center;page-break-inside:avoid;} img{width:100px;} p{font-size:0.7rem;font-weight:bold;text-transform:uppercase;}</style></head><body><h2 style="text-align:center">KAD KEHADIRAN: ${target}</h2><div class="grid">`);
         for(let s of list) {
             const src = await getQRImage(s.name);
             win.document.write(`<div class="card"><img src="${src}"><p>${s.name}<br>${s.class}</p></div>`);
@@ -445,7 +441,7 @@
     async function printBulk() {
         if(globalStudents.length === 0) return alert("Tiada data!");
         const win = window.open('', '', 'width=800,height=1000');
-        win.document.write(`<html><head><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;font-family:sans-serif;} .card{border:1px solid #ccc;padding:10px;text-align:center;page-break-inside:avoid;} img{width:100px;} p{font-size:0.7rem;font-weight:bold;text-transform:uppercase;}</style></head><body><div class="grid">`);
+        win.document.write(`<html><head><style>.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:15px;font-family:sans-serif;} .card{border:1px solid #ccc;padding:10px;text-align:center;page-break-inside:avoid;} img{width:100px;} p{font-size:0.7rem;font-weight:bold;text-transform:uppercase;}</style></head><body><h2 style="text-align:center">KAD KEHADIRAN SEKOLAH</h2><div class="grid">`);
         for(let s of globalStudents) {
             const src = await getQRImage(s.name);
             win.document.write(`<div class="card"><img src="${src}"><p>${s.name}<br>${s.class}</p></div>`);
@@ -472,8 +468,8 @@
         const filtered = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
         const ws = XLSX.utils.json_to_sheet(filtered);
         const wb = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(wb, ws, "Laporan RMT Cloud");
-        XLSX.writeFile(wb, `Laporan_RMT_Cloud_${selYear}.xlsx`);
+        XLSX.utils.book_append_sheet(wb, ws, "Laporan Kehadiran");
+        XLSX.writeFile(wb, `Laporan_Kehadiran_Cloud_${selYear}.xlsx`);
     }
 
     function backupSistem() {
@@ -481,7 +477,7 @@
         const blob = new Blob([JSON.stringify(data, null, 2)], {type: "application/json"});
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
-        a.download = `BACKUP_CLOUD_${new Date().getFullYear()}.json`;
+        a.download = `BACKUP_KEHADIRAN_CLOUD_${new Date().getFullYear()}.json`;
         a.click();
     }
 
@@ -497,10 +493,9 @@
         const csvContent = "data:text/csv;charset=utf-8,NAMA MURID,KELAS\nALI BIN AHMAD,1 CEMERLANG\nSITI BINTI ABU,1 BESTARI";
         const link = document.createElement("a");
         link.setAttribute("href", encodeURI(csvContent));
-        link.setAttribute("download", "TEMPLAT_MURID_RMT.csv");
+        link.setAttribute("download", "TEMPLAT_MURID_KEHADIRAN.csv");
         link.click();
     }
 </script>
 </body>
-
 </html>
