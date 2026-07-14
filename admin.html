@@ -194,10 +194,14 @@
                 <div style="display:flex; gap:10px; flex-wrap: wrap; align-items: center;">
                     
                     <select id="analysisMode" onchange="toggleAnalysisUI()" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc; font-weight: 600;">
-                        <option value="daily">Harian (Hari Ini)</option>
+                        <option value="daily">Harian (Pilih Tarikh)</option>
                         <option value="monthly">Bulanan</option>
                         <option value="history">Tahunan / Sejarah</option>
                     </select>
+
+                    <div id="dateFilterContainer">
+                        <input type="date" id="dateFilter" onchange="processAttendanceAnalysis()" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc;">
+                    </div>
 
                     <div id="monthFilterContainer" style="display: none;">
                         <select id="monthFilter" onchange="processAttendanceAnalysis()" style="padding: 6px 10px; border-radius: 4px; border: 1px solid #ccc;">
@@ -318,16 +322,14 @@
             globalStudents = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
             syncDropdowns();
             renderStudentsTable();
-            renderClassSummary(); // Baiki: Pastikan ringkasan harian dipanggil
-            processAttendanceAnalysis(); // Selaraskan graf & jadual bawah
+            processAttendanceAnalysis(); // Ini akan mengemas kini Ringkasan Harian & Graf automatik
             if(globalLogs.length > 0) renderAbsentList();
         });
 
         db.collection("logs").orderBy("timestamp", "desc").onSnapshot(snapshot => {
             globalLogs = snapshot.docs.map(doc => doc.data());
             setupYearFilter();
-            renderClassSummary(); // Baiki: Pastikan ringkasan harian dikemaskini
-            processAttendanceAnalysis(); // Selaraskan graf & jadual bawah
+            processAttendanceAnalysis(); // Ini akan mengemas kini Ringkasan Harian & Graf automatik
             renderAbsentList(); 
         });
     }
@@ -437,7 +439,7 @@
         
         filters.forEach(id => {
             const el = document.getElementById(id);
-            if(!el) return; // Baiki: Halang ralat jika menu dropdown lambat dijumpai
+            if(!el) return; 
             
             const currentVal = el.value;
             if(id === 'classFilter') el.innerHTML = '<option value="SEMUA">Semua Kelas</option>';
@@ -458,14 +460,23 @@
             <button class="btn btn-danger" style="padding:4px 8px" onclick="deleteStudentCloud('${s.id}')">×</button></td></tr>`).join('');
     }
 
-    // BAIKI: FUNGSI JADUAL RINGKASAN HARIAN (DIKEMBALIKAN)
-    function renderClassSummary() {
+    // FUNGSI RINGKASAN DINAMIK (MENERIMA PARAMETER TARIKH)
+    function renderClassSummary(targetDateStr) {
         const summaryBody = document.getElementById('classSummaryBody');
         if(!summaryBody) return;
 
-        const today = new Date().toLocaleDateString('en-GB');
-        const todayLogs = globalLogs.filter(l => l && l.date === today);
+        // Gunakan tarikh yang diberikan. Jika tiada, guna hari ini.
+        const dateToUse = targetDateStr || new Date().toLocaleDateString('en-GB');
+        
+        const targetLogs = globalLogs.filter(l => l && l.date === dateToUse);
         const classes = [...new Set(globalStudents.map(s => s.class))].sort();
+
+        // Kemaskini tajuk supaya pentadbir tahu tarikh apa yang sedang dipapar
+        const cardHeader = summaryBody.closest('.card').querySelector('h2');
+        if(cardHeader) {
+            const todayStr = new Date().toLocaleDateString('en-GB');
+            cardHeader.innerHTML = dateToUse === todayStr ? "Ringkasan Kehadiran Hari Ini" : `Ringkasan Kehadiran (${dateToUse})`;
+        }
 
         if(classes.length === 0) {
             summaryBody.innerHTML = `<tr><td colspan="4" style="text-align:center; padding:15px; color:var(--secondary);">Tiada data murid.</td></tr>`;
@@ -474,7 +485,7 @@
 
         summaryBody.innerHTML = classes.map(className => {
             const enrolmen = globalStudents.filter(s => s.class === className).length;
-            const hadir = todayLogs.filter(l => l.class === className).length;
+            const hadir = targetLogs.filter(l => l.class === className).length;
             const peratus = enrolmen > 0 ? ((hadir / enrolmen) * 100).toFixed(1) : 0;
 
             return `
@@ -565,36 +576,59 @@
         if(current) yf.value = current;
     }
 
+    // KAWALAN UI DATE PICKER DAN DROPDOWN
     function toggleAnalysisUI() {
         const mode = document.getElementById('analysisMode').value;
         const monthContainer = document.getElementById('monthFilterContainer');
-        if (mode === 'monthly') {
+        const dateContainer = document.getElementById('dateFilterContainer');
+        
+        if (mode === 'daily') {
+            monthContainer.style.display = 'none';
+            dateContainer.style.display = 'block';
+            // Set tarikh kalendar kepada hari ini secara default jika masih kosong
+            const dateInput = document.getElementById('dateFilter');
+            if (!dateInput.value) {
+                dateInput.valueAsDate = new Date();
+            }
+        } else if (mode === 'monthly') {
+            dateContainer.style.display = 'none';
             monthContainer.style.display = 'block';
             document.getElementById('monthFilter').value = String(new Date().getMonth() + 1).padStart(2, '0');
         } else {
+            dateContainer.style.display = 'none';
             monthContainer.style.display = 'none';
         }
         processAttendanceAnalysis();
     }
 
+    // FUNGSI TAPISAN KESELURUHAN YANG TELAH DISATUKAN
     function processAttendanceAnalysis() {
         if (!globalLogs) return; 
 
         const modeEl = document.getElementById('analysisMode');
         const yearFilterEl = document.getElementById('yearFilter');
         const monthFilterEl = document.getElementById('monthFilter');
+        const dateFilterEl = document.getElementById('dateFilter');
         
         const mode = modeEl ? modeEl.value : 'daily';
         const selectedYear = yearFilterEl && yearFilterEl.value ? yearFilterEl.value : new Date().getFullYear().toString();
         const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
-        const today = new Date().toLocaleDateString('en-GB'); 
+        
+        // Membaca Tarikh dari Date Picker HTML (YYYY-MM-DD -> DD/MM/YYYY)
+        let selectedDailyDate = new Date().toLocaleDateString('en-GB'); 
+        if (dateFilterEl && dateFilterEl.value) {
+            const d = dateFilterEl.value.split('-'); // [YYYY, MM, DD]
+            selectedDailyDate = `${d[2]}/${d[1]}/${d[0]}`; 
+        }
 
         let totalExpected = (globalStudents && globalStudents.length > 0) ? globalStudents.length : 242; 
         let filteredLogs = [];
 
         if (mode === 'daily') {
-            filteredLogs = globalLogs.filter(l => l && l.date === today);
+            filteredLogs = globalLogs.filter(l => l && l.date === selectedDailyDate);
             updateChartUI(filteredLogs.length, totalExpected - filteredLogs.length);
+            renderClassSummary(selectedDailyDate); // Sync jadual Ringkasan dengan tarikh yang dipilih
+
         } else if (mode === 'monthly') {
             filteredLogs = globalLogs.filter(l => {
                 if(!l || !l.date) return false;
@@ -603,10 +637,13 @@
             });
             const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
             updateChartUI(filteredLogs.length, (totalExpected * (uniqueDays || 1)) - filteredLogs.length);
+            renderClassSummary(); // Jadual ringkasan kembali ke mode lalai (Hari ini)
+
         } else if (mode === 'history') {
             filteredLogs = globalLogs.filter(l => l && l.date && l.date.split('/')[2] === selectedYear);
             const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
             updateChartUI(filteredLogs.length, (totalExpected * (uniqueDays || 1)) - filteredLogs.length);
+            renderClassSummary(); // Jadual ringkasan kembali ke mode lalai (Hari ini)
         }
 
         const sortedLogs = filteredLogs.sort((a, b) => {
@@ -665,12 +702,28 @@
     }
 
     function exportExcel() {
+        const mode = document.getElementById('analysisMode').value;
         const selYear = document.getElementById('yearFilter').value;
-        const filtered = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
+        let filename = `Laporan_Kehadiran_${selYear}.xlsx`;
+        let filtered = [];
+
+        // Eksport mengikut tarikh jika berada di mod harian
+        if(mode === 'daily') {
+            const dInput = document.getElementById('dateFilter').value; // YYYY-MM-DD
+            if(dInput) {
+                const d = dInput.split('-');
+                const formatD = `${d[2]}/${d[1]}/${d[0]}`;
+                filtered = globalLogs.filter(l => l.date === formatD);
+                filename = `Laporan_Harian_${dInput}.xlsx`;
+            }
+        } else {
+            filtered = globalLogs.filter(l => l.date && l.date.endsWith(selYear));
+        }
+
         const ws = XLSX.utils.json_to_sheet(filtered);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "Laporan");
-        XLSX.writeFile(wb, `Laporan_Kehadiran_${selYear}.xlsx`);
+        XLSX.writeFile(wb, filename);
     }
 
     // --- 6. PRINTING & QR CODE ---
@@ -679,6 +732,14 @@
         document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active-section');
         document.getElementById('tab-' + id.split('-')[1]).classList.add('active');
+        
+        // Trigger kalendar secara manual supaya papar hari ini jika baru masuk tab report
+        if (id === 'm-report') {
+            const dateInput = document.getElementById('dateFilter');
+            if (dateInput && !dateInput.value) {
+                dateInput.valueAsDate = new Date();
+            }
+        }
     }
 
     function updateQRNameDropdown() {
