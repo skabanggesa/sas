@@ -73,6 +73,7 @@
         .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.7rem; font-weight: 700; }
         .badge-green { background: #d1fae5; color: #065f46; }
         .badge-red { background: #fee2e2; color: #991b1b; }
+        .badge-blue { background: #dbeafe; color: #1d4ed8; }
 
         .section { display: none; animation: fadeIn 0.3s ease; }
         .active-section { display: block; }
@@ -495,9 +496,9 @@
         const sel = document.getElementById('newStudentClass');
         if (!sel) return;
 
-        // Jika sistem sudah ada data murid, gunakan kelas yang benar-benar wujud dalam database
+        // Gabungkan kelas lalai dengan kelas yang benar-benar wujud dalam database
         const existingClasses = [...new Set(globalStudents.map(s => s.class).filter(Boolean))].sort();
-        const options = existingClasses.length > 0 ? existingClasses : CLASS_OPTIONS;
+        const options = [...new Set([...CLASS_OPTIONS, ...existingClasses])];
 
         const currentVal = sel.value;
         sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
@@ -558,21 +559,22 @@
 
     // --- 4. UI & PAPARAN DATA ---
     function syncDropdowns() {
-        const classes = [...new Set(globalStudents.map(s => s.class))].sort();
+        const classes = [...new Set(globalStudents.map(s => s.class).filter(Boolean))].sort();
         const filters = ['classFilter', 'qrClassSelect', 'printByClassSelect', 'absentClassSelect'];
-        
+
         filters.forEach(id => {
             const el = document.getElementById(id);
             if(!el) return; 
-            
+
             const currentVal = el.value;
             if(id === 'classFilter') el.innerHTML = '<option value="SEMUA">Semua Kelas</option>';
             else el.innerHTML = '<option value="">-- Pilih Kelas --</option>';
-            
+
             classes.forEach(c => el.innerHTML += `<option value="${c}">${c}</option>`);
             el.value = currentVal;
-            populateAddStudentClassDropdown();
         });
+
+        populateAddStudentClassDropdown();
     }
 
     function renderStudentsTable() {
@@ -594,7 +596,7 @@
         const dateToUse = targetDateStr || new Date().toLocaleDateString('en-GB');
         
         const targetLogs = globalLogs.filter(l => l && l.date === dateToUse);
-        const classes = [...new Set(globalStudents.map(s => s.class))].sort();
+        const classes = [...new Set(globalStudents.map(s => s.class).filter(Boolean))].sort();
 
         // Kemaskini tajuk supaya pentadbir tahu tarikh apa yang sedang dipapar
         const cardHeader = summaryBody.closest('.card').querySelector('h2');
