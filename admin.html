@@ -142,6 +142,48 @@
                     <input type="file" accept=".csv" onchange="importCSVToCloud(event)" style="position:absolute; opacity:0; left:0; cursor:pointer; width:100%;">
                 </div>
             </div>
+            <div class="card" style="margin-top:20px;">
+    <div class="card-header">
+        <h2>Tambah Murid Baharu</h2>
+    </div>
+
+    <div style="display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:12px;">
+        <div>
+            <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem;">ID Murid</label>
+            <input
+                type="text"
+                id="newStudentId"
+                placeholder="Contoh: 070101012233"
+                style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; outline:none;"
+            >
+        </div>
+
+        <div>
+            <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem;">Nama Murid</label>
+            <input
+                type="text"
+                id="newStudentName"
+                placeholder="Contoh: Ali Bin Ahmad"
+                style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; outline:none;"
+            >
+        </div>
+
+        <div>
+            <label style="display:block; margin-bottom:6px; font-weight:600; font-size:0.85rem;">Kelas</label>
+            <select
+                id="newStudentClass"
+                style="width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; outline:none; background:#fff;"
+            >
+                <option value="">-- Pilih Kelas --</option>
+            </select>
+        </div>
+    </div>
+
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:16px; flex-wrap:wrap;">
+        <button class="btn btn-outline" type="button" onclick="clearAddStudentForm()">Kosongkan</button>
+        <button class="btn btn-success" type="button" onclick="addStudentCloud()">Simpan Murid</button>
+    </div>
+</div>
             <div class="table-container">
                 <table>
                     <thead><tr><th>Bil</th><th>Nama Penuh</th><th>Kelas</th><th style="text-align:right">Tindakan</th></tr></thead>
@@ -432,6 +474,88 @@
         link.click();
     }
 
+        // Senarai kelas lalai.
+    // Edit ikut kelas sebenar sekolah anda jika perlu.
+    const CLASS_OPTIONS = [
+        "1 CEMERLANG",
+        "1 GEMILANG",
+        "2 CEMERLANG",
+        "2 GEMILANG",
+        "3 CEMERLANG",
+        "3 GEMILANG",
+        "4 CEMERLANG",
+        "4 GEMILANG",
+        "5 CEMERLANG",
+        "5 GEMILANG",
+        "6 CEMERLANG",
+        "6 GEMILANG",
+    ];
+
+    function populateAddStudentClassDropdown() {
+        const sel = document.getElementById('newStudentClass');
+        if (!sel) return;
+
+        // Jika sistem sudah ada data murid, gunakan kelas yang benar-benar wujud dalam database
+        const existingClasses = [...new Set(globalStudents.map(s => s.class).filter(Boolean))].sort();
+        const options = existingClasses.length > 0 ? existingClasses : CLASS_OPTIONS;
+
+        const currentVal = sel.value;
+        sel.innerHTML = '<option value="">-- Pilih Kelas --</option>';
+        options.forEach(cls => {
+            sel.innerHTML += `<option value="${cls}">${cls}</option>`;
+        });
+        sel.value = currentVal;
+    }
+
+    function clearAddStudentForm() {
+        const idEl = document.getElementById('newStudentId');
+        const nameEl = document.getElementById('newStudentName');
+        const classEl = document.getElementById('newStudentClass');
+
+        if (idEl) idEl.value = '';
+        if (nameEl) nameEl.value = '';
+        if (classEl) classEl.value = '';
+    }
+
+    async function addStudentCloud() {
+        const idMurid = (document.getElementById('newStudentId')?.value || '').trim();
+        const namaMurid = (document.getElementById('newStudentName')?.value || '').trim().toUpperCase();
+        const kelasMurid = (document.getElementById('newStudentClass')?.value || '').trim().toUpperCase();
+
+        if (!idMurid || !namaMurid || !kelasMurid) {
+            alert("Sila lengkapkan ID Murid, Nama Murid dan Kelas.");
+            return;
+        }
+
+        try {
+            const studentRef = db.collection("students").doc(idMurid);
+            const existingDoc = await studentRef.get();
+
+            if (existingDoc.exists) {
+                const confirmOverwrite = confirm(`ID murid ${idMurid} sudah wujud. Mahu kemas kini data murid ini?`);
+                if (!confirmOverwrite) return;
+            }
+
+            await studentRef.set({
+                id: idMurid,
+                name: namaMurid,
+                class: kelasMurid
+            });
+
+            alert(`Berjaya! Murid "${namaMurid}" telah disimpan.`);
+            clearAddStudentForm();
+
+            // Tidak wajib panggil render manual sebab onSnapshot akan kemas kini automatik
+            // tetapi boleh dipanggil jika mahu refresh segera:
+            // renderStudentsTable();
+            // syncDropdowns();
+
+        } catch (err) {
+            console.error(err);
+            alert("Ralat simpan murid: " + err.message);
+        }
+    }
+
     // --- 4. UI & PAPARAN DATA ---
     function syncDropdowns() {
         const classes = [...new Set(globalStudents.map(s => s.class))].sort();
@@ -447,6 +571,7 @@
             
             classes.forEach(c => el.innerHTML += `<option value="${c}">${c}</option>`);
             el.value = currentVal;
+            populateAddStudentClassDropdown();
         });
     }
 
