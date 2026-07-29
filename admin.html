@@ -853,7 +853,7 @@
         XLSX.writeFile(wb, filename);
     }
 
-// --- 6. PRINTING & QR CODE (KEMAS KINI: DEPAN & BELAKANG) ---
+// --- 6. PRINTING & QR CODE (ALIRAN CETAKAN DIASINGKAN) ---
     function openTab(id) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
         document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
@@ -889,23 +889,34 @@
         });
     }
 
-    // GAYA CSS KAD PVC (SAIZ STANDARD: 54mm x 85.6mm)
+    // GAYA CSS CETAKAN A4 (SAIZ KAD PVC: 54mm x 85.6mm)
     const cardStyles = `
         <style>
             @page { size: A4 portrait; margin: 8mm; }
             body { margin: 0; font-family: 'Inter', Arial, sans-serif; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .page-title { text-align: center; font-size: 13pt; margin: 0 0 10px 0; color: #1e293b; font-weight: bold; page-break-after: avoid; }
+            .page-title { text-align: center; font-size: 11pt; margin: 0 0 5mm 0; color: #1e293b; font-weight: bold; page-break-after: avoid; text-transform: uppercase; }
             
-            /* Kontena Sepasang Kad (Depan + Belakang) */
-            .card-pair { display: flex; gap: 4mm; page-break-inside: avoid; margin-bottom: 6mm; justify-content: center; }
-            .grid { display: flex; flex-wrap: wrap; gap: 6mm; justify-content: center; }
+            /* Grid 3x3 (9 Kad Setiap Muka Surat A4) */
+            .grid { 
+                display: grid; 
+                grid-template-columns: repeat(3, 54mm); 
+                gap: 4mm 6mm; 
+                justify-content: center; 
+                align-content: start;
+            }
 
-            /* Struktur Asas Kad PVC Vertical */
+            /* Pemisah Muka Surat */
+            .page-break { 
+                page-break-before: always; 
+                margin-top: 8mm; 
+            }
+
+            /* Asas Kad PVC */
             .id-card { 
                 width: 54mm; 
                 height: 85.6mm; 
                 border: 1px dashed #cbd5e1; 
-                border-radius: 4mm;
+                border-radius: 3mm;
                 box-sizing: border-box; 
                 padding: 4mm 3mm; 
                 text-align: center; 
@@ -915,9 +926,10 @@
                 background: #ffffff; 
                 position: relative; 
                 overflow: hidden; 
+                page-break-inside: avoid;
             }
 
-            /* --- REKA BENTUK MUKA DEPAN --- */
+            /* REKA BENTUK MUKA DEPAN */
             .school-logo { width: 14mm; height: 14mm; object-fit: contain; margin-bottom: 1mm; }
             .school-name { font-size: 9pt; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; line-height: 1.1; }
             .system-title { font-size: 5.5pt; color: #2563eb; margin: 1.5mm 0 0 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
@@ -928,18 +940,19 @@
             .student-details { width: 100%; border-top: 1.5px solid #2563eb; padding-top: 2mm; margin-top: auto; }
             .student-name { font-size: 8pt; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; line-height: 1.2; word-break: break-word; }
 
-            /* --- REKA BENTUK MUKA BELAKANG --- */
+            /* REKA BENTUK MUKA BELAKANG */
             .id-card.back { text-align: left; padding: 5mm 4mm; background: #fafafa; }
             .back-header { font-size: 8.5pt; font-weight: 800; color: #dc2626; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 1.5mm; margin-bottom: 2.5mm; text-align: center; width: 100%; }
             .back-notes { font-size: 6.5pt; color: #334155; margin: 0; padding-left: 3.5mm; line-height: 1.45; font-weight: 500; }
             .back-notes li { margin-bottom: 2mm; }
             .back-footer { margin-top: auto; font-size: 6pt; text-align: center; color: #64748b; font-weight: bold; width: 100%; border-top: 1px dashed #cbd5e1; padding-top: 2mm; }
 
-            .single-layout { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+            /* Susunan Khas Individu */
+            .single-layout { display: flex; justify-content: center; align-items: center; min-height: 100vh; gap: 8mm; }
         </style>
     `;
 
-    // Templat HTML Muka Depan
+    // Templat Muka Depan
     function getFrontCardHTML(studentName, qrSrc) {
         return `
             <div class="id-card front">
@@ -954,26 +967,38 @@
         `;
     }
 
-    // Templat HTML Muka Belakang
+    // Templat Muka Belakang
     function getBackCardHTML() {
         return `
             <div class="id-card back">
                 <div class="back-header">📌 Peringatan</div>
                 <ul class="back-notes">
                     <li>QR code kad ini dijana menggunakan sistem SAS.</li>
-                    <li>Sila bawa kad ini setiap hari untuk merekodkan kehadiran ke sekolah.</li>
                     <li>Setiap QR adalah unik dan khas untuk murid ini sahaja.</li>
-                    <li>Kad ini tidak boleh dipindah milik kepada orang lain.</li>
                     <li>Jika terjumpa kad ini, sila kembalikan kepada pihak sekolah <b>(SK Abang Gesa)</b>.</li>
-                    <li>atau Hubungi Cikgu Edi di No. Telefon: <b>0106607787</b></li>
-                    <li>Kehilangan atau kerosakan kad perlu dilaporkan segera <br>(Denda/Caj gantian RM10 akan dikenakan).</br></li>
+                    <li>Hubungi No. Telefon: <b>0106607787</b></li>
                 </ul>
                 <div class="back-footer">HAK CIPTA TERPELIHARA SK ABANG GESA</div>
             </div>
         `;
     }
 
-    // FUNGSI 1: Cetak Individu
+    // Penjana 1 Muka Surat A4 Penuh Dengan Stiker Belakang (9 Keping)
+    function getSinglePageBackCardsHTML() {
+        let backCardsGroup = '';
+        for(let i = 0; i < 9; i++) {
+            backCardsGroup += getBackCardHTML();
+        }
+        return `
+            <div class="page-break"></div>
+            <h2 class="page-title">MUKA BELAKANG KAD (STIKER PERINGATAN - 1 HELAIAN A4)</h2>
+            <div class="grid">
+                ${backCardsGroup}
+            </div>
+        `;
+    }
+
+    // 1. CETAKAN INDIVIDU (1 Muka Depan + 1 Muka Belakang)
     async function printIndividual() {
         const selectedValue = document.getElementById('qrNameSelect').value;
         if(!selectedValue) return alert("Pilih murid!");
@@ -986,17 +1011,15 @@
             <html>
                 <head>${cardStyles}</head>
                 <body class="single-layout">
-                    <div class="card-pair">
-                        ${getFrontCardHTML(s.name, src)}
-                        ${getBackCardHTML()}
-                    </div>
+                    ${getFrontCardHTML(s.name, src)}
+                    ${getBackCardHTML()}
                     <script>setTimeout(()=>{window.print();window.close();},500);<\/script>
                 </body>
             </html>
         `);
     }
 
-    // FUNGSI 2: Cetak Mengikut Kelas
+    // 2. CETAKAN MENGIKUT KELAS
     async function printClass() {
         const target = document.getElementById('printByClassSelect').value;
         if(!target) return alert("Pilih kelas!");
@@ -1004,21 +1027,24 @@
         if(list.length === 0) return alert("Tiada murid!");
         
         const win = window.open('', '', 'width=900,height=1000');
-        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN: KELAS ${target}</h2><div class="grid">`);
+        let htmlContent = `<html><head>${cardStyles}</head><body>`;
         
+        // BAHAGIAN 1: Muka Depan Semua Murid
+        htmlContent += `<h2 class="page-title">MUKA DEPAN KAD: KELAS ${target}</h2><div class="grid">`;
         for(let s of list) {
             const src = await getQRImage(s.id || s.name);
-            win.document.write(`
-                <div class="card-pair">
-                    ${getFrontCardHTML(s.name, src)}
-                    ${getBackCardHTML()}
-                </div>
-            `);
+            htmlContent += getFrontCardHTML(s.name, src);
         }
-        win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1000);<\/script></body></html>`);
+        htmlContent += `</div>`;
+        
+        // BAHAGIAN 2: Muka Belakang (Tepat 1 Helaian A4 Sahaja)
+        htmlContent += getSinglePageBackCardsHTML();
+        
+        htmlContent += `<script>setTimeout(()=>{window.print();window.close();},1000);<\/script></body></html>`;
+        win.document.write(htmlContent);
     }
 
-    // FUNGSI 3: Cetak Pukal (Satu Sekolah)
+    // 3. CETAKAN PUKAL (SAATUKAN SATU SEKOLAH)
     async function printBulk() {
         if(globalStudents.length === 0) return alert("Tiada data!");
         const list = [...globalStudents].sort((a, b) => {
@@ -1027,18 +1053,21 @@
         });
         
         const win = window.open('', '', 'width=900,height=1000');
-        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN SEKOLAH (SEMUA MURID)</h2><div class="grid">`);
+        let htmlContent = `<html><head>${cardStyles}</head><body>`;
         
+        // BAHAGIAN 1: Muka Depan Semua Murid
+        htmlContent += `<h2 class="page-title">MUKA DEPAN KAD SEKOLAH (SEMUA MURID)</h2><div class="grid">`;
         for(let s of list) {
             const src = await getQRImage(s.id || s.name);
-            win.document.write(`
-                <div class="card-pair">
-                    ${getFrontCardHTML(s.name, src)}
-                    ${getBackCardHTML()}
-                </div>
-            `);
+            htmlContent += getFrontCardHTML(s.name, src);
         }
-        win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1500);<\/script></body></html>`);
+        htmlContent += `</div>`;
+        
+        // BAHAGIAN 2: Muka Belakang (Tepat 1 Helaian A4 Sahaja)
+        htmlContent += getSinglePageBackCardsHTML();
+        
+        htmlContent += `<script>setTimeout(()=>{window.print();window.close();},1500);<\/script></body></html>`;
+        win.document.write(htmlContent);
     }
 </script>
 </body>
