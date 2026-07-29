@@ -173,15 +173,30 @@
         }
     }
 
-    const html5QrcodeScanner = new Html5QrcodeScanner("reader", { 
-        fps: 10, 
-        qrbox: 250,
-        videoConstraints: {
-            facingMode: "environment"
-        }
-    }, false);
+// ==========================================
+    // KOD BAHARU: AUTO-BUKA KAMERA BELAKANG
+    // ==========================================
+    const html5QrCode = new Html5Qrcode("reader");
 
-    html5QrcodeScanner.render(onScanSuccess);
+    const config = { 
+        fps: 10, 
+        qrbox: { width: 250, height: 250 } 
+    };
+
+    // Mulakan imbasan secara automatik menggunakan kamera belakang ("environment")
+    html5QrCode.start(
+        { facingMode: "environment" }, 
+        config, 
+        onScanSuccess, 
+        (errorMessage) => {
+            // Ralat bacaan QR frame-demi-frame (diabaikan supaya console tidak penuh)
+        }
+    ).catch((err) => {
+        console.error("Gagal memulakan kamera automatik:", err);
+        const statusDiv = document.getElementById('status');
+        statusDiv.innerHTML = "❌ GAGAL BUKA KAMERA<br>Sila benarkan akses kamera pada pelayar web anda.";
+        statusDiv.className = "status-box error";
+    });
 </script>
 </body>
 </html>
