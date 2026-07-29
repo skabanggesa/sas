@@ -174,7 +174,7 @@
     }
 
 // ==========================================
-    // KOD BAHARU: AUTO-BUKA KAMERA BELAKANG
+    // KOD BAHARU: PENGESANAN KAMERA BELAKANG PINTAR
     // ==========================================
     const html5QrCode = new Html5Qrcode("reader");
 
@@ -183,20 +183,55 @@
         qrbox: { width: 250, height: 250 } 
     };
 
-    // Mulakan imbasan secara automatik menggunakan kamera belakang ("environment")
-    html5QrCode.start(
-        { facingMode: "environment" }, 
-        config, 
-        onScanSuccess, 
-        (errorMessage) => {
-            // Ralat bacaan QR frame-demi-frame (diabaikan supaya console tidak penuh)
+    // Langkah 1: Senaraikan semua kamera yang ada pada peranti
+    Html5Qrcode.getCameras().then(devices => {
+        if (devices && devices.length > 0) {
+            let selectedCameraId = devices[0].id; // Lalai: Kamera pertama
+
+            // Langkah 2: Cari kamera belakang berdasarkan label kata kunci
+            const backCamera = devices.find(device => {
+                const label = device.label.toLowerCase();
+                return label.includes('back') || 
+                       label.includes('rear') || 
+                       label.includes('environment') ||
+                       label.includes('belakang');
+            });
+
+            if (backCamera) {
+                // Jika kamera belakang dijumpai melalui label
+                selectedCameraId = backCamera.id;
+            } else if (devices.length > 1) {
+                // Pada telefon, kamera belakang selalunya berada di senarai terakhir
+                selectedCameraId = devices[devices.length - 1].id;
+            }
+
+            // Langkah 3: Mulakan kamera menggunakan deviceId yang tepat
+            html5QrCode.start(
+                selectedCameraId, 
+                config, 
+                onScanSuccess, 
+                (errorMessage) => {
+                    // Abaikan ralat frame bulanan
+                }
+            ).catch((err) => {
+                paparRalatKamera("Gagal memulakan imbasan: " + err);
+            });
+
+        } else {
+            paparRalatKamera("Tiada kamera dikesan pada peranti ini.");
         }
-    ).catch((err) => {
-        console.error("Gagal memulakan kamera automatik:", err);
-        const statusDiv = document.getElementById('status');
-        statusDiv.innerHTML = "❌ GAGAL BUKA KAMERA<br>Sila benarkan akses kamera pada pelayar web anda.";
-        statusDiv.className = "status-box error";
+    }).catch(err => {
+        // Ralat ini biasanya berlaku jika dibuka tanpa HTTPS atau kebenaran ditolak
+        console.error("Ralat kamera:", err);
+        paparRalatKamera("Sila benarkan akses kamera & pastikan guna HTTPS.");
     });
+
+    // Fungsi paparan ralat pada status-box
+    function paparRalatKamera(mesej) {
+        const statusDiv = document.getElementById('status');
+        statusDiv.innerHTML = `❌ GAGAL BUKA KAMERA<br>${mesej}`;
+        statusDiv.className = "status-box error";
+    }
 </script>
 </body>
 </html>
