@@ -19,6 +19,20 @@
         .header { padding: 20px; background: #1e293b; margin-bottom: 0px; border-bottom: 1px solid #334155; }
         /* Banner untuk mengaktifkan suara pada browser */
         .audio-banner { background: #3b82f6; padding: 12px; color: white; font-weight: bold; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #1d4ed8; }
+        /* Gaya butang tukar kamera */
+        .btn-switch {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 0.9rem;
+            margin: 15px 0;
+            transition: background 0.2s;
+        }
+        .btn-switch:hover { background: #2563eb; }
     </style>
 </head>
 <body>
@@ -32,7 +46,14 @@
     <p style="margin:5px 0 0; opacity:0.7; font-size:0.8rem;">Sesi Perekodan Kehadiran Sekolah (Real-Time)</p>
 </div>
 
-<div id="reader" style="margin-top: 20px;"></div>
+<!-- Butang Tukar Kamera (Depan / Belakang) -->
+<div>
+    <button id="btn-switch-cam" class="btn-switch" onclick="switchCamera()">
+        🔄 TUKAR KAMERA (DEPAN / BELAKANG)
+    </button>
+</div>
+
+<div id="reader"></div>
 
 <div id="status" class="status-box waiting">
     Sedia untuk imbasan QR kehadiran...
@@ -74,14 +95,15 @@
         
         isProcessing = true;
 
-                        // Mainkan bunyi Beep selepas kebenaran browser diberikan
-                try {
+        // Mainkan bunyi Beep selepas kebenaran browser diberikan
+        try {
             const beepSound = document.getElementById('beep');
             beepSound.currentTime = 0; // Reset ke saat 0 supaya boleh bunyi pantas berturut-turut
             beepSound.play();
         } catch(e) {
             console.log("Audio disekat browser. Sila klik banner atas terlebih dahulu.");
         }
+
         const scannedText = decodedText.trim().toUpperCase(); 
         const statusDiv = document.getElementById('status');
         
@@ -109,7 +131,7 @@
             if (studentData) {
                 const hariIni = new Date().toLocaleDateString('en-GB'); // Format tarikh semasa: DD/MM/YYYY
 
-                // KEMAS KINI 2: Semak rekod sama ada murid telah melakukan scan pada hari ini
+                // Semak rekod sama ada murid telah melakukan scan pada hari ini
                 const logSemak = await db.collection("logs")
                     .where("id", "==", studentId)
                     .where("date", "==", hariIni)
@@ -173,65 +195,50 @@
         }
     }
 
-// ==========================================
-    // KOD BAHARU: PENGESANAN KAMERA BELAKANG PINTAR
     // ==========================================
+    // PENGURUSAN KAMERA (DEPAN & BELAKANG)
+    // ==========================================
+    let currentFacingMode = "user"; // Lalai: Kamera Depan ("user") agar murid boleh nampak skrin
     const html5QrCode = new Html5Qrcode("reader");
-
     const config = { 
         fps: 10, 
         qrbox: { width: 250, height: 250 } 
     };
 
-    // Langkah 1: Senaraikan semua kamera yang ada pada peranti
-    Html5Qrcode.getCameras().then(devices => {
-        if (devices && devices.length > 0) {
-            let selectedCameraId = devices[0].id; // Lalai: Kamera pertama
-
-            // Langkah 2: Cari kamera belakang berdasarkan label kata kunci
-            const backCamera = devices.find(device => {
-                const label = device.label.toLowerCase();
-                return label.includes('back') || 
-                       label.includes('rear') || 
-                       label.includes('environment') ||
-                       label.includes('belakang');
+    function mulaKamera(facingMode) {
+        if (html5QrCode.isScanning) {
+            html5QrCode.stop().then(() => {
+                lancarkan(facingMode);
+            }).catch(err => {
+                console.error("Gagal menghentikan kamera:", err);
+                lancarkan(facingMode);
             });
-
-            if (backCamera) {
-                // Jika kamera belakang dijumpai melalui label
-                selectedCameraId = backCamera.id;
-            } else if (devices.length > 1) {
-                // Pada telefon, kamera belakang selalunya berada di senarai terakhir
-                selectedCameraId = devices[devices.length - 1].id;
-            }
-
-            // Langkah 3: Mulakan kamera menggunakan deviceId yang tepat
-            html5QrCode.start(
-                selectedCameraId, 
-                config, 
-                onScanSuccess, 
-                (errorMessage) => {
-                    // Abaikan ralat frame bulanan
-                }
-            ).catch((err) => {
-                paparRalatKamera("Gagal memulakan imbasan: " + err);
-            });
-
         } else {
-            paparRalatKamera("Tiada kamera dikesan pada peranti ini.");
+            lancarkan(facingMode);
         }
-    }).catch(err => {
-        // Ralat ini biasanya berlaku jika dibuka tanpa HTTPS atau kebenaran ditolak
-        console.error("Ralat kamera:", err);
-        paparRalatKamera("Sila benarkan akses kamera & pastikan guna HTTPS.");
-    });
-
-    // Fungsi paparan ralat pada status-box
-    function paparRalatKamera(mesej) {
-        const statusDiv = document.getElementById('status');
-        statusDiv.innerHTML = `❌ GAGAL BUKA KAMERA<br>${mesej}`;
-        statusDiv.className = "status-box error";
     }
+
+    function lancarkan(facingMode) {
+        html5QrCode.start(
+            { facingMode: facingMode }, 
+            config, 
+            onScanSuccess
+        ).catch((err) => {
+            console.error("Gagal memulakan kamera:", err);
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = "❌ GAGAL BUKA KAMERA<br>Sila benarkan akses kamera & pastikan pautan HTTPS.";
+            statusDiv.className = "status-box error";
+        });
+    }
+
+    // Fungsi yang dipanggil oleh butang 'TUKAR KAMERA'
+    function switchCamera() {
+        currentFacingMode = (currentFacingMode === "user") ? "environment" : "user";
+        mulaKamera(currentFacingMode);
+    }
+
+    // Mulakan sistem secara automatik menggunakan kamera depan
+    mulaKamera(currentFacingMode);
 </script>
 </body>
 </html>
