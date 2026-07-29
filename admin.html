@@ -853,14 +853,13 @@
         XLSX.writeFile(wb, filename);
     }
 
-    // --- 6. PRINTING & QR CODE ---
+// --- 6. PRINTING & QR CODE (KEMAS KINI: DEPAN & BELAKANG) ---
     function openTab(id) {
         document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
         document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
         document.getElementById(id).classList.add('active-section');
         document.getElementById('tab-' + id.split('-')[1]).classList.add('active');
         
-        // Trigger kalendar secara manual supaya papar hari ini jika baru masuk tab report
         if (id === 'm-report') {
             const dateInput = document.getElementById('dateFilter');
             if (dateInput && !dateInput.value) {
@@ -890,60 +889,154 @@
         });
     }
 
+    // GAYA CSS KAD PVC (SAIZ STANDARD: 54mm x 85.6mm)
     const cardStyles = `
         <style>
-            @page { size: A4; margin: 0; }
-            body { margin: 0; font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-            .page-title { text-align: center; font-size: 14pt; margin: 20px 0 0 0; color: #334155; font-weight: bold; page-break-after: avoid; }
-            .grid { display: grid; grid-template-columns: repeat(3, 54mm); gap: 6mm 10mm; justify-content: center; padding: 10mm; }
-            .id-card { width: 54mm; height: 85.6mm; border: 1px dashed #cbd5e1; box-sizing: border-box; padding: 6mm 4mm 4mm 4mm; text-align: center; display: flex; flex-direction: column; align-items: center; background: #ffffff; page-break-inside: avoid; position: relative; overflow: hidden; }
-            .school-header { width: 100%; margin-bottom: 4mm; }
-            .school-name { font-size: 9.5pt; font-weight: 800; color: #1e293b; margin: 0; text-transform: uppercase; letter-spacing: 0.3px; line-height: 1.2; }
-            .system-title { font-size: 6pt; color: #64748b; margin: 2px 0 0 0; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+            @page { size: A4 portrait; margin: 8mm; }
+            body { margin: 0; font-family: 'Inter', Arial, sans-serif; background: #fff; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+            .page-title { text-align: center; font-size: 13pt; margin: 0 0 10px 0; color: #1e293b; font-weight: bold; page-break-after: avoid; }
+            
+            /* Kontena Sepasang Kad (Depan + Belakang) */
+            .card-pair { display: flex; gap: 4mm; page-break-inside: avoid; margin-bottom: 6mm; justify-content: center; }
+            .grid { display: flex; flex-wrap: wrap; gap: 6mm; justify-content: center; }
+
+            /* Struktur Asas Kad PVC Vertical */
+            .id-card { 
+                width: 54mm; 
+                height: 85.6mm; 
+                border: 1px dashed #cbd5e1; 
+                border-radius: 4mm;
+                box-sizing: border-box; 
+                padding: 4mm 3mm; 
+                text-align: center; 
+                display: flex; 
+                flex-direction: column; 
+                align-items: center; 
+                background: #ffffff; 
+                position: relative; 
+                overflow: hidden; 
+            }
+
+            /* --- REKA BENTUK MUKA DEPAN --- */
+            .school-logo { width: 14mm; height: 14mm; object-fit: contain; margin-bottom: 1mm; }
+            .school-name { font-size: 9pt; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; line-height: 1.1; }
+            .system-title { font-size: 5.5pt; color: #2563eb; margin: 1.5mm 0 0 0; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+            
             .qr-space { margin: auto 0; display: flex; justify-content: center; align-items: center; }
-            .qr-space img { width: 34mm; height: 34mm; object-fit: contain; }
-            .student-details { width: 100%; border-top: 1px solid #e2e8f0; padding-top: 3mm; margin-top: auto; }
-            .student-name { font-size: 8pt; font-weight: 700; color: #0f172a; margin: 0 0 2px 0; text-transform: uppercase; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; min-height: 2.6em; display: flex; align-items: center; justify-content: center; }
-            .student-class { font-size: 7.5pt; font-weight: 700; color: #2563eb; margin: 0; text-transform: uppercase; }
-            .single-layout { display: flex; justify-content: center; align-items: center; height: 100vh; }
+            .qr-space img { width: 32mm; height: 32mm; object-fit: contain; }
+
+            .student-details { width: 100%; border-top: 1.5px solid #2563eb; padding-top: 2mm; margin-top: auto; }
+            .student-name { font-size: 8pt; font-weight: 800; color: #0f172a; margin: 0; text-transform: uppercase; line-height: 1.2; word-break: break-word; }
+
+            /* --- REKA BENTUK MUKA BELAKANG --- */
+            .id-card.back { text-align: left; padding: 5mm 4mm; background: #fafafa; }
+            .back-header { font-size: 8.5pt; font-weight: 800; color: #dc2626; text-transform: uppercase; border-bottom: 1px solid #e2e8f0; padding-bottom: 1.5mm; margin-bottom: 2.5mm; text-align: center; width: 100%; }
+            .back-notes { font-size: 6.5pt; color: #334155; margin: 0; padding-left: 3.5mm; line-height: 1.45; font-weight: 500; }
+            .back-notes li { margin-bottom: 2mm; }
+            .back-footer { margin-top: auto; font-size: 6pt; text-align: center; color: #64748b; font-weight: bold; width: 100%; border-top: 1px dashed #cbd5e1; padding-top: 2mm; }
+
+            .single-layout { display: flex; justify-content: center; align-items: center; min-height: 100vh; }
         </style>
     `;
 
+    // Templat HTML Muka Depan
+    function getFrontCardHTML(studentName, qrSrc) {
+        return `
+            <div class="id-card front">
+                <img src="logo.png" class="school-logo" alt="Logo" onerror="this.style.display='none'">
+                <h1 class="school-name">SK ABANG GESA</h1>
+                <div class="system-title">Student's Attendance System ( S A S )</div>
+                <div class="qr-space"><img src="${qrSrc}"></div>
+                <div class="student-details">
+                    <div class="student-name">${studentName}</div>
+                </div>
+            </div>
+        `;
+    }
+
+    // Templat HTML Muka Belakang
+    function getBackCardHTML() {
+        return `
+            <div class="id-card back">
+                <div class="back-header">📌 Peringatan</div>
+                <ul class="back-notes">
+                    <li>QR code kad ini dijana menggunakan sistem SAS.</li>
+                    <li>Sila bawa kad ini setiap hari untuk merekodkan kehadiran ke sekolah.</li>
+                    <li>Setiap QR adalah unik dan khas untuk murid ini sahaja.</li>
+                    <li>Kad ini tidak boleh dipindah milik kepada orang lain.</li>
+                    <li>Jika terjumpa kad ini, sila kembalikan kepada pihak sekolah <b>(SK Abang Gesa)</b>.</li>
+                    <li>Hubungi No. Telefon: <b>0106607787</b></li>
+                    <li>Kehilangan atau kerosakan kad perlu dilaporkan segera <br>(Denda/Caj gantian RM__ akan dikenakan).</br></li>
+                </ul>
+                <div class="back-footer">HAK CIPTA TERPELIHARA SK ABANG GESA</div>
+            </div>
+        `;
+    }
+
+    // FUNGSI 1: Cetak Individu
     async function printIndividual() {
         const selectedValue = document.getElementById('qrNameSelect').value;
         if(!selectedValue) return alert("Pilih murid!");
         const s = globalStudents.find(st => st.id === selectedValue || st.name === selectedValue);
         if(!s) return alert("Data murid tidak lengkap!");
+        
         const src = await getQRImage(s.id || s.name);
-        const win = window.open('', '', 'width=600,height=700');
-        win.document.write(`<html><head>${cardStyles}</head><body class="single-layout"><div class="id-card"><div class="school-header"><h1 class="school-name">SK Abang Gesa</h1><div class="system-title">Student Attendance System</div></div><div class="qr-space"><img src="${src}"></div><div class="student-details"><div class="student-name">${s.name}</div><div class="student-class">${s.class}</div></div></div><script>setTimeout(()=>{window.print();window.close();},500);<\/script></body></html>`);
+        const win = window.open('', '', 'width=700,height=800');
+        win.document.write(`
+            <html>
+                <head>${cardStyles}</head>
+                <body class="single-layout">
+                    <div class="card-pair">
+                        ${getFrontCardHTML(s.name, src)}
+                        ${getBackCardHTML()}
+                    </div>
+                    <script>setTimeout(()=>{window.print();window.close();},500);<\/script>
+                </body>
+            </html>
+        `);
     }
 
+    // FUNGSI 2: Cetak Mengikut Kelas
     async function printClass() {
         const target = document.getElementById('printByClassSelect').value;
         if(!target) return alert("Pilih kelas!");
         const list = globalStudents.filter(s => s.class === target).sort((a,b) => a.name.localeCompare(b.name));
         if(list.length === 0) return alert("Tiada murid!");
+        
         const win = window.open('', '', 'width=900,height=1000');
-        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN: ${target}</h2><div class="grid">`);
+        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN: KELAS ${target}</h2><div class="grid">`);
+        
         for(let s of list) {
             const src = await getQRImage(s.id || s.name);
-            win.document.write(`<div class="id-card"><div class="school-header"><h1 class="school-name">SK Abang Gesa</h1><div class="system-title">Student Attendance System</div></div><div class="qr-space"><img src="${src}"></div><div class="student-details"><div class="student-name">${s.name}</div><div class="student-class">${s.class}</div></div></div>`);
+            win.document.write(`
+                <div class="card-pair">
+                    ${getFrontCardHTML(s.name, src)}
+                    ${getBackCardHTML()}
+                </div>
+            `);
         }
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1000);<\/script></body></html>`);
     }
 
+    // FUNGSI 3: Cetak Pukal (Satu Sekolah)
     async function printBulk() {
         if(globalStudents.length === 0) return alert("Tiada data!");
         const list = [...globalStudents].sort((a, b) => {
             if (a.class !== b.class) return a.class.localeCompare(b.class);
             return a.name.localeCompare(b.name);
         });
+        
         const win = window.open('', '', 'width=900,height=1000');
-        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN SEKOLAH</h2><div class="grid">`);
+        win.document.write(`<html><head>${cardStyles}</head><body><h2 class="page-title">KAD KEHADIRAN SEKOLAH (SEMUA MURID)</h2><div class="grid">`);
+        
         for(let s of list) {
             const src = await getQRImage(s.id || s.name);
-            win.document.write(`<div class="id-card"><div class="school-header"><h1 class="school-name">SK Abang Gesa</h1><div class="system-title">Student Attendance System</div></div><div class="qr-space"><img src="${src}"></div><div class="student-details"><div class="student-name">${s.name}</div><div class="student-class">${s.class}</div></div></div>`);
+            win.document.write(`
+                <div class="card-pair">
+                    ${getFrontCardHTML(s.name, src)}
+                    ${getBackCardHTML()}
+                </div>
+            `);
         }
         win.document.write(`</div><script>setTimeout(()=>{window.print();window.close();},1500);<\/script></body></html>`);
     }
