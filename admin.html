@@ -854,19 +854,31 @@
     }
 
 // --- 6. PRINTING & QR CODE (ALIRAN CETAKAN DIASINGKAN) ---
-    function openTab(id) {
-        document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
-        document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
-        document.getElementById(id).classList.add('active-section');
-        document.getElementById('tab-' + id.split('-')[1]).classList.add('active');
-        
-        if (id === 'm-report') {
-            const dateInput = document.getElementById('dateFilter');
-            if (dateInput && !dateInput.value) {
-                dateInput.valueAsDate = new Date();
-            }
+function openTab(id) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
+    document.querySelectorAll('.nav-tabs button').forEach(b => b.classList.remove('active'));
+    document.getElementById(id).classList.add('active-section');
+    
+    const tabBtn = document.getElementById('tab-' + id.split('-')[1]);
+    if (tabBtn) tabBtn.classList.add('active');
+    
+    // Kemas kini tarikh automatik mengikut waktu tempatan Malaysia
+    if (id === 'm-report' || id === 'm-analytics') {
+        const dateInput = document.getElementById('dateFilter');
+        if (dateInput) {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            
+            // Format YYYY-MM-DD mengikut tarikh tempatan
+            dateInput.value = `${year}-${month}-${day}`;
+
+            // Trigger event 'change' supaya fungsi pemuatan data dipanggil automatik
+            dateInput.dispatchEvent(new Event('change'));
         }
     }
+}
 
     function updateQRNameDropdown() {
         const cls = document.getElementById('qrClassSelect').value;
