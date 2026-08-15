@@ -3,23 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistem Kehadiran Murid Cloud</title>
+    <title>Sistem Kehadiran Murid Cloud (Google Sheets)</title>
     <script src="https://unpkg.com/html5-qrcode"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     <style>
         body { font-family: 'Inter', sans-serif; background: #0f172a; color: white; margin: 0; text-align: center; }
         #reader { width: 100%; max-width: 500px; margin: auto; background: white; border-radius: 12px; overflow: hidden; }
         .status-box { margin: 20px; padding: 20px; border-radius: 15px; font-size: 1.2rem; font-weight: bold; min-height: 80px; }
         .success { background: #10b981; color: white; animation: pulse 0.5s; }
         .error { background: #ef4444; color: white; }
-        .warning { background: #f59e0b; color: white; } /* Gaya untuk imbasan duplikat */
+        .warning { background: #f59e0b; color: white; }
         .waiting { background: #334155; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         .header { padding: 20px; background: #1e293b; margin-bottom: 0px; border-bottom: 1px solid #334155; }
-        /* Banner untuk mengaktifkan suara pada browser */
         .audio-banner { background: #3b82f6; padding: 12px; color: white; font-weight: bold; cursor: pointer; font-size: 0.9rem; border-bottom: 1px solid #1d4ed8; }
-        /* Gaya butang tukar kamera */
         .btn-switch {
             background: #3b82f6;
             color: white;
@@ -43,10 +39,10 @@
 
 <div class="header">
     <h2 style="margin:0;">SISTEM KEHADIRAN MURID</h2>
-    <p style="margin:5px 0 0; opacity:0.7; font-size:0.8rem;">Sesi Perekodan Kehadiran Sekolah (Real-Time)</p>
+    <p style="margin:5px 0 0; opacity:0.7; font-size:0.8rem;">Pengimbas QR Kehadiran (Google Sheets Real-Time)</p>
 </div>
 
-<!-- Butang Tukar Kamera (Depan / Belakang) -->
+<!-- Butang Tukar Kamera -->
 <div>
     <button id="btn-switch-cam" class="btn-switch" onclick="switchCamera()">
         🔄 TUKAR KAMERA (DEPAN / BELAKANG)
@@ -56,49 +52,90 @@
 <div id="reader"></div>
 
 <div id="status" class="status-box waiting">
-    Sedia untuk imbasan QR kehadiran...
+    Sedang memuatkan pangkalan data Google Sheets...
 </div>
 
 <audio id="beep" src="beep.mp3" preload="auto"></audio>
 
 <script>
-    // Konfigurasi Firebase 
-    const firebaseConfig = {
-        apiKey: "AIzaSyDNlFEnA9ZGLFTFCuwMK5ZMzv3D8Ww2BAo",
-        authDomain: "smppro-2845e.firebaseapp.com",
-        projectId: "smppro-2845e",
-        storageBucket: "smppro-2845e.firebasestorage.app",
-        messagingSenderId: "488762363336",
-        appId: "1:488762363336:web:da4ccbb41c1236eaf184fd",
-        measurementId: "G-NZR5BXZKR1"
-    };
-    firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
+    // --- KONFIGURASI GOOGLE SHEETS SAGE/SAS WEB APP ---
+    const SAGE_URL = "https://script.google.com/macros/s/AKfycbwMcWyfOAkHawx3WjhAWQGjkB9MbbRcFkYTfDmXllz1mGKnUzB9Syi7ppsKPeDhFU2vqA/exec";
 
+    let globalStudents = [];
+    let todayLogs = [];
     let lastScanned = "";
     let isProcessing = false;
 
-    // Fungsi Khas: Membuka sekatan audio pada peranti/browser
+    // API Helper untuk Google Apps Script
+    async function apiRequest(action, payload = {}) {
+        try {
+            const formData = new URLSearchParams();
+            formData.append('action', action);
+            formData.append('data', JSON.stringify(payload));
+
+            const response = await fetch(SAGE_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: formData.toString()
+            });
+            return await response.json();
+        } catch (error) {
+            console.error(`[API Error] Action '${action}':`, error);
+            return { status: "error", message: error.message };
+        }
+    }
+
+    // Memuatkan pangkalan data murid & log semasa dari Google Sheets
+    async function syncDataFromSheets() {
+        try {
+            const response = await fetch(`${SAGE_URL}?action=getAllData`);
+            const json = await response.json();
+
+            if (json.status === "success" || json.students || json.master_data) {
+                const rawStudents = json.students || json.master_data || [];
+                const rawLogs = json.logs || json.sas || [];
+
+                globalStudents = rawStudents.map(s => ({
+                    id: String(s.id || s['ID MURID'] || s.ID_PELAJAR || '').trim(),
+                    name: String(s.name || s.NAMA || s.NAMA_MURID || '').trim().toUpperCase(),
+                    class: String(s.class || s.KELAS || s.CLASS || '').trim().toUpperCase()
+                })).filter(s => s.id || s.name);
+
+                const hariIni = new Date().toLocaleDateString('en-GB');
+                todayLogs = rawLogs.filter(l => (l.date || l.TARIKH) === hariIni);
+
+                const statusDiv = document.getElementById('status');
+                if (statusDiv.classList.contains('waiting')) {
+                    statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
+                }
+            }
+        } catch (err) {
+            console.error("Gagal menyinkronkan data Google Sheets:", err);
+        }
+    }
+
+    // Aktifkan Audio Browser
     function unlockAudio() {
         const beep = document.getElementById('beep');
         beep.play().then(() => {
             beep.pause();
             beep.currentTime = 0;
-            document.getElementById('audio-banner').style.display = 'none'; // Sorok banner selepas diaktifkan
+            document.getElementById('audio-banner').style.display = 'none';
         }).catch(err => {
             console.error("Gagal mengaktifkan audio:", err);
         });
     }
 
+    // Fungsi Utama Apabila QR Berjaya Diimbas
     async function onScanSuccess(decodedText) {
         if (isProcessing || decodedText === lastScanned) return;
         
         isProcessing = true;
 
-        // Mainkan bunyi Beep selepas kebenaran browser diberikan
+        // Bunyi Beep
         try {
             const beepSound = document.getElementById('beep');
-            beepSound.currentTime = 0; // Reset ke saat 0 supaya boleh bunyi pantas berturut-turut
+            beepSound.currentTime = 0;
             beepSound.play();
         } catch(e) {
             console.log("Audio disekat browser. Sila klik banner atas terlebih dahulu.");
@@ -108,37 +145,22 @@
         const statusDiv = document.getElementById('status');
         
         try {
-            let studentData = null;
-            let studentId = "";
+            // Cari murid dalam memori
+            const student = globalStudents.find(s => 
+                s.id.toUpperCase() === scannedText || s.name.toUpperCase() === scannedText
+            );
 
-            // LANGKAH 1: Cuba cari jika teks QR ialah ID/IC Murid
-            const docRef = db.collection("students").doc(scannedText);
-            const docSnap = await docRef.get();
-            
-            if (docSnap.exists) {
-                studentData = docSnap.data();
-                studentId = scannedText;
-            } else {
-                // LANGKAH 2: Cuba cari jika teks QR ialah NAMA MURID
-                const q = await db.collection("students").where("name", "==", scannedText).get();
-                if (!q.empty) {
-                    studentData = q.docs[0].data();
-                    studentId = studentData.id || q.docs[0].id;
-                }
-            }
-            
-            // JIKA MURID DIJUMPAI
-            if (studentData) {
-                const hariIni = new Date().toLocaleDateString('en-GB'); // Format tarikh semasa: DD/MM/YYYY
+            if (student) {
+                const hariIni = new Date().toLocaleDateString('en-GB');
+                const masaIni = new Date().toLocaleTimeString('en-GB', { hour12: false });
 
-                // Semak rekod sama ada murid telah melakukan scan pada hari ini
-                const logSemak = await db.collection("logs")
-                    .where("id", "==", studentId)
-                    .where("date", "==", hariIni)
-                    .get();
+                // Semak jika sudah imbas hari ini
+                const sudahHadir = todayLogs.some(l => 
+                    (l.id && l.id === student.id) || (l.name && l.name.toUpperCase() === student.name.toUpperCase())
+                );
 
-                if (!logSemak.empty) {
-                    statusDiv.innerHTML = `⚠️ SUDAH HADIR!<br>${studentData.name}<br>Kehadiran murid ini telah direkodkan hari ini.`;
+                if (sudahHadir) {
+                    statusDiv.innerHTML = `⚠️ SUDAH HADIR!<br>${student.name}<br>Kehadiran murid ini telah direkodkan hari ini.`;
                     statusDiv.className = "status-box warning";
                     lastScanned = decodedText;
                     
@@ -148,21 +170,23 @@
                         isProcessing = false;
                         lastScanned = "";
                     }, 3000);
-                    return; // Menyekat log baharu daripada disimpan semula
+                    return;
                 }
-                
-                // Simpan log kehadiran unik ke koleksi "logs"
-                await db.collection("logs").add({
-                    id: studentId,
-                    name: studentData.name,
-                    class: studentData.class,
+
+                // Tanda hadir dalam memori terlebih dahulu (elak duplikasi imbasan pantas)
+                todayLogs.push({ id: student.id, name: student.name, class: student.class, date: hariIni });
+
+                // Hantar rekod ke Google Sheets melalui API
+                await apiRequest("addLog", {
+                    id: student.id,
+                    name: student.name,
+                    class: student.class,
                     date: hariIni,
-                    time: new Date().toLocaleTimeString('en-GB', {hour12: false}), // Format: HH:MM:SS
-                    status: "HADIR",
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    time: masaIni,
+                    status: "HADIR"
                 });
 
-                statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${studentData.name}<br>(${studentData.class})`;
+                statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${student.name}<br>(${student.class})`;
                 statusDiv.className = "status-box success";
                 lastScanned = decodedText;
                 
@@ -174,8 +198,8 @@
                 }, 3000);
 
             } else {
-                // JIKA MEMANG TIADA DALAM DATABASE
-                statusDiv.innerHTML = `❌ GAGAL DETECT!<br>Data (${scannedText}) tiada dalam sistem Cloud.`;
+                // Murid tidak dijumpai dalam Google Sheets
+                statusDiv.innerHTML = `❌ GAGAL DETECT!<br>Data (${scannedText}) tiada dalam Google Sheets.`;
                 statusDiv.className = "status-box error";
                 setTimeout(() => { 
                     statusDiv.className = "status-box waiting"; 
@@ -184,7 +208,7 @@
                 }, 3000);
             }
         } catch (err) {
-            console.error("Ralat Firebase:", err);
+            console.error("Ralat Pengimbas:", err);
             statusDiv.innerHTML = `❌ REKOD GAGAL!<br>${err.message}`;
             statusDiv.className = "status-box error";
             setTimeout(() => { 
@@ -195,15 +219,10 @@
         }
     }
 
-    // ==========================================
-    // PENGURUSAN KAMERA (DEPAN & BELAKANG)
-    // ==========================================
-    let currentFacingMode = "user"; // Lalai: Kamera Depan ("user") agar murid boleh nampak skrin
+    // --- PENGURUSAN KAMERA ---
+    let currentFacingMode = "user"; // Depan
     const html5QrCode = new Html5Qrcode("reader");
-    const config = { 
-        fps: 10, 
-        qrbox: { width: 250, height: 250 } 
-    };
+    const config = { fps: 10, qrbox: { width: 250, height: 250 } };
 
     function mulaKamera(facingMode) {
         if (html5QrCode.isScanning) {
@@ -231,13 +250,14 @@
         });
     }
 
-    // Fungsi yang dipanggil oleh butang 'TUKAR KAMERA'
     function switchCamera() {
         currentFacingMode = (currentFacingMode === "user") ? "environment" : "user";
         mulaKamera(currentFacingMode);
     }
 
-    // Mulakan sistem secara automatik menggunakan kamera depan
+    // Mulakan Muat Data & Kamera
+    syncDataFromSheets();
+    setInterval(syncDataFromSheets, 30000); // Polling data murid baharu setiap 30 saat
     mulaKamera(currentFacingMode);
 </script>
 </body>
