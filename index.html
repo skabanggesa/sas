@@ -66,6 +66,15 @@
     let lastScanned = "";
     let isProcessing = false;
 
+    // FUNGSI PENYERAGAMAN TARIKH (Sentiasa DD/MM/YYYY - Cth: 15/08/2026)
+    function getTarikhHariIni() {
+        const d = new Date();
+        const day = String(d.getDate()).padStart(2, '0');
+        const month = String(d.getMonth() + 1).padStart(2, '0');
+        const year = d.getFullYear();
+        return `${day}/${month}/${year}`;
+    }
+
     // API Helper untuk Google Apps Script (Format JSON Mesra CORS)
     async function apiRequest(action, payload = {}) {
         try {
@@ -102,7 +111,7 @@
                     class: String(s.class || s.kelas || s.KELAS || '').trim().toUpperCase()
                 })).filter(s => s.id || s.name);
 
-                const hariIni = new Date().toLocaleDateString('ms-MY');
+                const hariIni = getTarikhHariIni();
                 todayLogs = rawLogs.filter(l => (l.date || l.tarikh || l.TARIKH) === hariIni);
 
                 const statusDiv = document.getElementById('status');
@@ -152,7 +161,7 @@
             );
 
             if (student) {
-                const hariIni = new Date().toLocaleDateString('ms-MY');
+                const hariIni = getTarikhHariIni(); // Format Standard DD/MM/YYYY
                 const masaIni = new Date().toLocaleTimeString('ms-MY', { hour12: false });
 
                 // Semak jika sudah imbas hari ini
