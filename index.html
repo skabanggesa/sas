@@ -66,17 +66,18 @@
     let lastScanned = "";
     let isProcessing = false;
 
-    // API Helper untuk Google Apps Script
+    // API Helper untuk Google Apps Script (Format JSON Mesra CORS)
     async function apiRequest(action, payload = {}) {
         try {
-            const formData = new URLSearchParams();
-            formData.append('action', action);
-            formData.append('data', JSON.stringify(payload));
+            const bodyData = {
+                action: action,
+                data: payload
+            };
 
             const response = await fetch(SAGE_URL, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData.toString()
+                headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+                body: JSON.stringify(bodyData)
             });
             return await response.json();
         } catch (error) {
@@ -91,18 +92,18 @@
             const response = await fetch(`${SAGE_URL}?action=getAllData`);
             const json = await response.json();
 
-            if (json.status === "success" || json.students || json.master_data) {
-                const rawStudents = json.students || json.master_data || [];
-                const rawLogs = json.logs || json.sas || [];
+            if (json.status === "success" || json.students || json.pelajar) {
+                const rawStudents = json.students || json.pelajar || [];
+                const rawLogs = json.logs || [];
 
                 globalStudents = rawStudents.map(s => ({
                     id: String(s.id || s['ID MURID'] || s.ID_PELAJAR || '').trim(),
-                    name: String(s.name || s.NAMA || s.NAMA_MURID || '').trim().toUpperCase(),
-                    class: String(s.class || s.KELAS || s.CLASS || '').trim().toUpperCase()
+                    name: String(s.name || s.nama || s.NAMA || '').trim().toUpperCase(),
+                    class: String(s.class || s.kelas || s.KELAS || '').trim().toUpperCase()
                 })).filter(s => s.id || s.name);
 
-                const hariIni = new Date().toLocaleDateString('en-GB');
-                todayLogs = rawLogs.filter(l => (l.date || l.TARIKH) === hariIni);
+                const hariIni = new Date().toLocaleDateString('ms-MY');
+                todayLogs = rawLogs.filter(l => (l.date || l.tarikh || l.TARIKH) === hariIni);
 
                 const statusDiv = document.getElementById('status');
                 if (statusDiv.classList.contains('waiting')) {
@@ -138,7 +139,7 @@
             beepSound.currentTime = 0;
             beepSound.play();
         } catch(e) {
-            console.log("Audio disekat browser. Sila klik banner atas terlebih dahulu.");
+            console.log("Audio disekat browser.");
         }
 
         const scannedText = decodedText.trim().toUpperCase(); 
@@ -151,8 +152,8 @@
             );
 
             if (student) {
-                const hariIni = new Date().toLocaleDateString('en-GB');
-                const masaIni = new Date().toLocaleTimeString('en-GB', { hour12: false });
+                const hariIni = new Date().toLocaleDateString('ms-MY');
+                const masaIni = new Date().toLocaleTimeString('ms-MY', { hour12: false });
 
                 // Semak jika sudah imbas hari ini
                 const sudahHadir = todayLogs.some(l => 
@@ -173,11 +174,11 @@
                     return;
                 }
 
-                // Tanda hadir dalam memori terlebih dahulu (elak duplikasi imbasan pantas)
-                todayLogs.push({ id: student.id, name: student.name, class: student.class, date: hariIni });
+                statusDiv.innerHTML = `⏳ MENYIMPAN...<br>${student.name}<br>Hantar ke Google Sheets...`;
+                statusDiv.className = "status-box waiting";
 
                 // Hantar rekod ke Google Sheets melalui API
-                await apiRequest("addLog", {
+                const res = await apiRequest("addLog", {
                     id: student.id,
                     name: student.name,
                     class: student.class,
@@ -186,8 +187,19 @@
                     status: "HADIR"
                 });
 
-                statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${student.name}<br>(${student.class})`;
-                statusDiv.className = "status-box success";
+                // SEMAK BALASAN GOOGLE SHEETS DAHULU SEBELUM TUKAR KE HIJAU
+                if (res && res.status === "success") {
+                    // Tambah rekod ke memori tempatan
+                    todayLogs.push({ id: student.id, name: student.name, class: student.class, date: hariIni });
+
+                    statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${student.name}<br>(${student.class})`;
+                    statusDiv.className = "status-box success";
+                } else {
+                    // Jika backend memulangkan ralat
+                    statusDiv.innerHTML = `❌ GAGAL SIMPAN!<br>${res.message || "Ralat pelayan Google Sheets"}`;
+                    statusDiv.className = "status-box error";
+                }
+
                 lastScanned = decodedText;
                 
                 setTimeout(() => { 
