@@ -889,35 +889,48 @@ async function markAttendanceManual(studentId, studentName, studentClass) {
     }
 
 function updateQRNameDropdown() {
-    const selectedClass = document.getElementById('qrClassSelect').value;
+    const classSelect = document.getElementById('qrClassSelect');
     const nameSelect = document.getElementById('qrNameSelect');
-    if (!nameSelect) return;
-    
+    if (!classSelect || !nameSelect) return;
+
+    const selectedClass = classSelect.value.trim().toUpperCase();
     nameSelect.innerHTML = '<option value="">-- Pilih Nama --</option>';
 
-    // Semak pembolehubah senarai murid secara selamat tanpa menyebabkan ralat
+    // 1. Dapatkan senarai murid dari pembolehubah sedia ada
     let studentList = [];
-    if (typeof allStudents !== 'undefined' && Array.isArray(allStudents)) {
+    if (typeof allStudents !== 'undefined' && Array.isArray(allStudents) && allStudents.length > 0) {
         studentList = allStudents;
-    } else if (typeof activeStudents !== 'undefined' && Array.isArray(activeStudents)) {
+    } else if (typeof activeStudents !== 'undefined' && Array.isArray(activeStudents) && activeStudents.length > 0) {
         studentList = activeStudents;
+    } else if (typeof masterStudents !== 'undefined' && Array.isArray(masterStudents) && masterStudents.length > 0) {
+        studentList = masterStudents;
     }
+
+    // Semak di Console F12 sekiranya data masih kosong
+    console.log("Jumlah murid dalam simpanan:", studentList.length, "Kelas dipilih:", selectedClass);
 
     if (!selectedClass || studentList.length === 0) return;
 
-    // Tapis mengikut kelas
+    // 2. Tapis murid dengan menyemak semua variasi kunci kelas
     const filtered = studentList.filter(s => {
-        const k = (s.kelas || s.class || '').toString().trim().toUpperCase();
-        return k === selectedClass.trim().toUpperCase();
+        const studentClass = (s.kelas || s.class || s.KELAS || s['KELAS'] || '').toString().trim().toUpperCase();
+        return studentClass === selectedClass;
     });
 
+    // 3. Masukkan nama ke dropdown dengan menyemak semua variasi kunci nama & ID
     filtered.forEach(student => {
-        const opt = document.createElement('option');
-        opt.value = student.idMurid || student.id || student.studentId;
-        opt.textContent = student.nama || student.name;
-        nameSelect.appendChild(opt);
+        const studentId = student.idMurid || student.studentId || student.id || student.ID || student['ID MURID'] || student['ID_PELAJAR'];
+        const studentName = student.nama || student.name || student.NAMA || student['NAMA MURID'] || student['NAMA'];
+
+        if (studentName) {
+            const opt = document.createElement('option');
+            opt.value = studentId;
+            opt.textContent = studentName;
+            nameSelect.appendChild(opt);
+        }
     });
 }
+    
     async function getQRImage(text) {
         return new Promise((resolve) => {
             const tempDiv = document.getElementById('tempQR');
