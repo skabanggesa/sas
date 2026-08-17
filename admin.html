@@ -670,38 +670,42 @@
     }
 
 async function markAttendanceManual(studentId, studentName, studentClass) {
-    if (confirm(`Sahkan kehadiran manual untuk ${studentName}?`)) {
-        try {
-            // Format Tarikh YYYY-MM-DD yang mesra Google Sheets/Apps Script
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = String(now.getMonth() + 1).padStart(2, '0');
-            const day = String(now.getDate()).padStart(2, '0');
-            const hariIni = `${year}-${month}-${day}`; 
-            
-            const masaIni = now.toLocaleTimeString('en-GB', { hour12: false });
+    if (!confirm(`Sahkan kehadiran manual untuk ${studentName}?`)) return;
 
-            // Sesuaikan nama kunci payload mengikut apa yang dibaca oleh code.gs
-            await apiRequest("addLog", {
-                studentId: studentId,
-                idMurid: studentId,
-                nama: studentName,
-                kelas: studentClass,
-                tarikh: hariIni,
-                date: hariIni,
-                masa: masaIni,
-                time: masaIni,
-                status: "HADIR"
-            });
+    try {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const tarikhIni = `${year}-${month}-${day}`;
+        const masaIni = now.toLocaleTimeString('en-GB', { hour12: false });
 
-            alert(`✅ Kehadiran ${studentName} direkodkan!`);
-            if (typeof fetchAllData === 'function') fetchAllData();
-        } catch (err) {
-            alert("❌ Ralat berlaku: " + err.message);
+        const res = await apiRequest("addLog", {
+            idMurid: studentId,
+            studentId: studentId,
+            id: studentId,
+            nama: studentName,
+            name: studentName,
+            kelas: studentClass,
+            class: studentClass,
+            tarikh: tarikhIni,
+            date: tarikhIni,
+            masa: masaIni,
+            time: masaIni,
+            status: "HADIR"
+        });
+
+        // Semak makbalas ralat dari backend
+        if (res && res.status === "error") {
+            throw new Error(res.message);
         }
+
+        alert(`✅ Kehadiran ${studentName} direkodkan!`);
+        if (typeof fetchAllData === 'function') fetchAllData();
+    } catch (err) {
+        alert("❌ Ralat berlaku: " + err.message);
     }
 }
-
     // --- 5. ANALISIS & GRAF KESELURUHAN ---
     function setupYearFilter() {
         let years = [...new Set(globalLogs.map(l => l.date ? l.date.split('/')[2] : null))].filter(y => y);
