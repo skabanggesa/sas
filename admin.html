@@ -273,17 +273,23 @@
         </div>
     </div>
 
-    <div id="m-qr" class="section">
-        <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
-            <div class="card">
-                <div class="card-header"><h2>Gantian Kad Individu</h2></div>
-                <div style="display:flex; flex-direction:column; gap:12px;">
-                    <label style="font-size:0.85rem;">Pilih Kelas & Nama:</label>
-                    <select id="qrClassSelect" onchange="updateQRNameDropdown()"></select>
-                    <select id="qrNameSelect"><option value="">-- Pilih Nama --</option></select>
-                    <button class="btn btn-primary" style="justify-content:center; margin-top:10px;" onclick="printIndividual()">Jana & Cetak Kad</button>
-                </div>
+<div id="m-qr" class="section">
+    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
+        <div class="card">
+            <div class="card-header"><h2>Gantian Kad Individu</h2></div>
+            <div style="display:flex; flex-direction:column; gap:12px;">
+                <label style="font-size:0.85rem;">Pilih Kelas & Nama:</label>
+                <select id="qrClassSelect" onchange="updateQRNameDropdown()">
+                    <option value="">-- Pilih Kelas --</option>
+                </select>
+                <select id="qrNameSelect">
+                    <option value="">-- Pilih Nama --</option>
+                </select>
+                <button class="btn btn-primary" style="justify-content:center; margin-top:10px;" onclick="printIndividual()">Jana & Cetak Kad</button>
             </div>
+        </div>
+    </div>
+</div>
             <div class="card">
                 <div class="card-header"><h2>Cetakan Mengikut Kelas</h2></div>
                 <div style="display:flex; flex-direction:column; gap:12px;">
@@ -663,28 +669,38 @@
         }
     }
 
-    async function markAttendanceManual(studentId, studentName, studentClass) {
-        if (confirm(`Sahkan kehadiran manual untuk ${studentName}?`)) {
-            try {
-                const hariIni = new Date().toLocaleDateString('en-GB');
-                const masaIni = new Date().toLocaleTimeString('en-GB', { hour12: false });
+async function markAttendanceManual(studentId, studentName, studentClass) {
+    if (confirm(`Sahkan kehadiran manual untuk ${studentName}?`)) {
+        try {
+            // Format Tarikh YYYY-MM-DD yang mesra Google Sheets/Apps Script
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = String(now.getMonth() + 1).padStart(2, '0');
+            const day = String(now.getDate()).padStart(2, '0');
+            const hariIni = `${year}-${month}-${day}`; 
+            
+            const masaIni = now.toLocaleTimeString('en-GB', { hour12: false });
 
-                await apiRequest("addLog", {
-                    id: studentId,
-                    name: studentName,
-                    class: studentClass,
-                    date: hariIni,
-                    time: masaIni,
-                    status: "HADIR"
-                });
+            // Sesuaikan nama kunci payload mengikut apa yang dibaca oleh code.gs
+            await apiRequest("addLog", {
+                studentId: studentId,
+                idMurid: studentId,
+                nama: studentName,
+                kelas: studentClass,
+                tarikh: hariIni,
+                date: hariIni,
+                masa: masaIni,
+                time: masaIni,
+                status: "HADIR"
+            });
 
-                alert(`✅ Kehadiran ${studentName} direkodkan!`);
-                fetchAllData();
-            } catch (err) {
-                alert("❌ Ralat berlaku: " + err.message);
-            }
+            alert(`✅ Kehadiran ${studentName} direkodkan!`);
+            if (typeof fetchAllData === 'function') fetchAllData();
+        } catch (err) {
+            alert("❌ Ralat berlaku: " + err.message);
         }
     }
+}
 
     // --- 5. ANALISIS & GRAF KESELURUHAN ---
     function setupYearFilter() {
@@ -867,14 +883,21 @@
         }
     }
 
-    function updateQRNameDropdown() {
-        const cls = document.getElementById('qrClassSelect').value;
-        const list = globalStudents.filter(s => s.class === cls).sort((a,b) => a.name.localeCompare(b.name));
-        const ns = document.getElementById('qrNameSelect');
-        if (!ns) return;
-        ns.innerHTML = '<option value="">-- Pilih Nama --</option>';
-        list.forEach(s => ns.innerHTML += `<option value="${s.name}">${s.name}</option>`);
-    }
+function updateQRNameDropdown() {
+    const selectedClass = document.getElementById('qrClassSelect').value;
+    const nameSelect = document.getElementById('qrNameSelect');
+    nameSelect.innerHTML = '<option value="">-- Pilih Nama --</option>';
+
+    if (!selectedClass || !allStudents) return;
+
+    const filtered = allStudents.filter(s => s.kelas === selectedClass || s.class === selectedClass);
+    filtered.forEach(student => {
+        const opt = document.createElement('option');
+        opt.value = student.idMurid || student.id || student.studentId; // Menyimpan ID unik
+        opt.textContent = student.nama || student.name;
+        nameSelect.appendChild(opt);
+    });
+}
 
     async function getQRImage(text) {
         return new Promise((resolve) => {
