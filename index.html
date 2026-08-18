@@ -63,8 +63,9 @@
 
     let globalStudents = [];
     let todayLogs = [];
-    let lastScanned = "";
-    let isProcessing = false;
+    let senaraiImbasanTerakhir = {}; 
+    const TEMPOH_COOLDOWN = 10000;
+    let resetStatusTimer;
 
     // FUNGSI PENYERAGAMAN TARIKH (Sentiasa DD/MM/YYYY - Cth: 15/08/2026)
     function getTarikhHariIni() {
@@ -136,13 +137,24 @@
         });
     }
 
-    // Fungsi Utama Apabila QR Berjaya Diimbas
+// Fungsi Utama Apabila QR Berjaya Diimbas (Versi Pantas & Anti-Spam)
     async function onScanSuccess(decodedText) {
-        if (isProcessing || decodedText === lastScanned) return;
-        
-        isProcessing = true;
+        const scannedText = decodedText.trim().toUpperCase();
+        const masaSekarang = new Date().getTime();
 
-        // Bunyi Beep
+        // 1. SEMAKAN ANTI-SPAM (COOLDOWN INDIVIDU)
+        if (senaraiImbasanTerakhir[scannedText]) {
+            const bezaMasa = masaSekarang - senaraiImbasanTerakhir[scannedText];
+            if (bezaMasa < TEMPOH_COOLDOWN) {
+                // Abaikan imbasan diam-diam (tiada beep, tiada loading) supaya tak kacau murid lain
+                return; 
+            }
+        }
+
+        // Kemaskini memori rekod imbasan terkini untuk individu ini
+        senaraiImbasanTerakhir[scannedText] = masaSekarang;
+
+        // 2. BUNYI BEEP
         try {
             const beepSound = document.getElementById('beep');
             beepSound.currentTime = 0;
@@ -151,9 +163,11 @@
             console.log("Audio disekat browser.");
         }
 
-        const scannedText = decodedText.trim().toUpperCase(); 
         const statusDiv = document.getElementById('status');
-        
+
+        // Bersihkan timer status UI sebelum ini (supaya paparan tidak ter'reset' tiba-tiba)
+        if (resetStatusTimer) clearTimeout(resetStatusTimer);
+
         try {
             // Cari murid dalam memori
             const student = globalStudents.find(s => 
@@ -172,14 +186,11 @@
                 if (sudahHadir) {
                     statusDiv.innerHTML = `⚠️ SUDAH HADIR!<br>${student.name}<br>Kehadiran murid ini telah direkodkan hari ini.`;
                     statusDiv.className = "status-box warning";
-                    lastScanned = decodedText;
                     
-                    setTimeout(() => { 
+                    resetStatusTimer = setTimeout(() => { 
                         statusDiv.className = "status-box waiting"; 
                         statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
-                        isProcessing = false;
-                        lastScanned = "";
-                    }, 3000);
+                    }, 4000);
                     return;
                 }
 
@@ -198,48 +209,41 @@
 
                 // SEMAK BALASAN GOOGLE SHEETS DAHULU SEBELUM TUKAR KE HIJAU
                 if (res && res.status === "success") {
-                    // Tambah rekod ke memori tempatan
                     todayLogs.push({ id: student.id, name: student.name, class: student.class, date: hariIni });
-
                     statusDiv.innerHTML = `✅ KEHADIRAN DIREKOD!<br>${student.name}<br>(${student.class})`;
                     statusDiv.className = "status-box success";
                 } else {
-                    // Jika backend memulangkan ralat
                     statusDiv.innerHTML = `❌ GAGAL SIMPAN!<br>${res.message || "Ralat pelayan Google Sheets"}`;
                     statusDiv.className = "status-box error";
                 }
 
-                lastScanned = decodedText;
-                
-                setTimeout(() => { 
+                resetStatusTimer = setTimeout(() => { 
                     statusDiv.className = "status-box waiting"; 
                     statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
-                    isProcessing = false;
-                    lastScanned = "";
                 }, 3000);
 
             } else {
                 // Murid tidak dijumpai dalam Google Sheets
                 statusDiv.innerHTML = `❌ GAGAL DETECT!<br>Data (${scannedText}) tiada dalam Google Sheets.`;
                 statusDiv.className = "status-box error";
-                setTimeout(() => { 
+                
+                resetStatusTimer = setTimeout(() => { 
                     statusDiv.className = "status-box waiting"; 
                     statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
-                    isProcessing = false;
-                }, 3000);
+                }, 4000);
             }
         } catch (err) {
             console.error("Ralat Pengimbas:", err);
             statusDiv.innerHTML = `❌ REKOD GAGAL!<br>${err.message}`;
             statusDiv.className = "status-box error";
-            setTimeout(() => { 
+            
+            resetStatusTimer = setTimeout(() => { 
                 statusDiv.className = "status-box waiting"; 
                 statusDiv.innerHTML = "Sedia untuk imbasan QR kehadiran...";
-                isProcessing = false;
             }, 5000);
         }
     }
-
+    
     // --- PENGURUSAN KAMERA ---
     let currentFacingMode = "user"; // Depan
     const html5QrCode = new Html5Qrcode("reader");
