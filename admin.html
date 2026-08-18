@@ -319,25 +319,30 @@
     let userRole = 'admin'; 
     let syncInterval = null;
 
-    // --- API HELPER FOR GOOGLE APPS SCRIPT ---
-    async function apiRequest(action, payload = {}) {
-        try {
-            const formData = new URLSearchParams();
-            formData.append('action', action);
-            formData.append('data', JSON.stringify(payload));
+   // --- API HELPER FOR GOOGLE APPS SCRIPT (VERSI BAHARU) ---
+async function apiRequest(action, payload = {}) {
+    try {
+        // Gabungkan action dan data ke dalam satu objek JSON
+        const bodyData = {
+            action: action,
+            data: payload,
+            ...payload // Memastikan parameter fleksibel untuk pelbagai action
+        };
 
-            const response = await fetch(SAGE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: formData.toString()
-            });
-            return await response.json();
-        } catch (error) {
-            console.error(`[API Error] Action '${action}':`, error);
-            return { status: "error", message: error.message };
-        }
+        const response = await fetch(SAGE_URL, {
+            method: 'POST',
+            // Gunakan text/plain untuk mengelakkan isu CORS Preflight pada Google Apps Script
+            headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+            body: JSON.stringify(bodyData)
+        });
+
+        return await response.json();
+    } catch (error) {
+        console.error(`[API Error] Action '${action}':`, error);
+        return { status: "error", message: error.message };
     }
-
+}
+    
     // --- 1. LOG IN & LOG OUT LOGIC ---
     function handleLogin() {
         const email = document.getElementById('userEmail').value.trim().toLowerCase();
