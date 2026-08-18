@@ -369,53 +369,44 @@ async function apiRequest(action, payload = {}) {
         location.reload();
     }
 
-// --- 2. DATA SYNC (GOOGLE SHEETS POLLING - VERSI DIPENAMBAH BAIK) ---
-async function fetchAllData() {
-    try {
-        // Gunakan apiRequest (POST) atau tambah timestamp untuk elak isu Caching Pelayar Web
-        const json = await apiRequest("getAllData");
+// --- 2. DATA SYNC (GOOGLE SHEETS POLLING) ---
+    async function fetchAllData() {
+        try {
+            // SAYA UBAH BARIS INI SAHAJA: Tambah time() untuk elak cache/data sangkut
+            const response = await fetch(`${SAGE_URL}?action=getAllData&_t=${new Date().getTime()}`);
+            const json = await response.json();
 
-        if (json && (json.status === "success" || json.students || json.master_data)) {
-            const rawStudents = json.students || json.master_data || json.pelajar || [];
-            const rawLogs = json.logs || json.sas || [];
+            if (json.status === "success" || json.students || json.master_data) {
+                const rawStudents = json.students || json.master_data || [];
+                const rawLogs = json.logs || json.sas || [];
 
-            // 1. Pemprosesan Data Murid
-            globalStudents = rawStudents.map(s => ({
-                id: String(s.id || s['ID MURID'] || s.ID_PELAJAR || '').trim(),
-                name: String(s.name || s.NAMA || s.NAMA_MURID || '').trim().toUpperCase(),
-                class: String(s.class || s.KELAS || s.CLASS || '').trim().toUpperCase()
-            })).filter(s => s.id || s.name);
+                globalStudents = rawStudents.map(s => ({
+                    id: String(s.id || s['ID MURID'] || s.ID_PELAJAR || '').trim(),
+                    name: String(s.name || s.NAMA || s.NAMA_MURID || '').trim().toUpperCase(),
+                    class: String(s.class || s.KELAS || s.CLASS || '').trim().toUpperCase()
+                })).filter(s => s.id || s.name);
 
-            // 2. Pemprosesan Data Log Kehadiran + Penormalan Tarikh (YYYY-MM-DD)
-            globalLogs = rawLogs.map(l => {
-                let rawDate = String(l.date || l.tarikh || l.TARIKH || '').trim();
-                let cleanDate = normalizeDateStr(rawDate); // Penormalan format tarikh
-
-                return {
+                globalLogs = rawLogs.map(l => ({
                     id: String(l.id || l.ID_PELAJAR || l['ID MURID'] || '').trim(),
                     name: String(l.name || l.NAMA || '').trim().toUpperCase(),
                     class: String(l.class || l.KELAS || '').trim().toUpperCase(),
-                    date: cleanDate,
-                    time: String(l.time || l.masa || l.MASA || '').trim(),
+                    date: String(l.date || l.TARIKH || '').trim(),
+                    time: String(l.time || l.MASA || '').trim(),
                     status: String(l.status || 'HADIR').trim()
-                };
-            });
+                }));
 
-            // 3. Kemaskini Semua Paparan UI
-            if (typeof syncDropdowns === 'function') syncDropdowns();
-            if (typeof renderStudentsTable === 'function') renderStudentsTable();
-            if (typeof setupYearFilter === 'function') setupYearFilter();
-            if (typeof processAttendanceAnalysis === 'function') processAttendanceAnalysis();
-            if (typeof renderAbsentList === 'function') renderAbsentList();
-
-            console.log("✅ Data berjaya dikemaskini. Jumlah Log:", globalLogs.length);
-        } else {
-            console.warn("Menerima respon tidak sah dari Google Sheets:", json);
+                syncDropdowns();
+                renderStudentsTable();
+                setupYearFilter();
+                processAttendanceAnalysis();
+                renderAbsentList();
+            }
+        } catch (err) {
+            console.error("Ralat membaca data dari Google Sheets:", err);
         }
-    } catch (err) {
-        console.error("Ralat membaca data dari Google Sheets:", err);
-    }
-}
+    } 
+
+
 
 // --- FUNGSI HELPER: Penormalan Tarikh ke Format YYYY-MM-DD ---
 function normalizeDateStr(dateStr) {
