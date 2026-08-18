@@ -707,7 +707,7 @@ async function markAttendanceManual(studentId, studentName, studentClass) {
         const year = now.getFullYear();
         const month = String(now.getMonth() + 1).padStart(2, '0');
         const day = String(now.getDate()).padStart(2, '0');
-        const tarikhIni = `${year}-${month}-${day}`;
+        const tarikhIni = `${day}/${month}/${year}`;
         const masaIni = now.toLocaleTimeString('en-GB', { hour12: false });
 
         const res = await apiRequest("addLog", {
