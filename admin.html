@@ -369,42 +369,76 @@ async function apiRequest(action, payload = {}) {
         location.reload();
     }
 
-    // --- 2. DATA SYNC (GOOGLE SHEETS POLLING) ---
-    async function fetchAllData() {
-        try {
-            const response = await fetch(`${SAGE_URL}?action=getAllData`);
-            const json = await response.json();
+// --- 2. DATA SYNC (GOOGLE SHEETS POLLING - VERSI DIPENAMBAH BAIK) ---
+async function fetchAllData() {
+    try {
+        // Gunakan apiRequest (POST) atau tambah timestamp untuk elak isu Caching Pelayar Web
+        const json = await apiRequest("getAllData");
 
-            if (json.status === "success" || json.students || json.master_data) {
-                const rawStudents = json.students || json.master_data || [];
-                const rawLogs = json.logs || json.sas || [];
+        if (json && (json.status === "success" || json.students || json.master_data)) {
+            const rawStudents = json.students || json.master_data || json.pelajar || [];
+            const rawLogs = json.logs || json.sas || [];
 
-                globalStudents = rawStudents.map(s => ({
-                    id: String(s.id || s['ID MURID'] || s.ID_PELAJAR || '').trim(),
-                    name: String(s.name || s.NAMA || s.NAMA_MURID || '').trim().toUpperCase(),
-                    class: String(s.class || s.KELAS || s.CLASS || '').trim().toUpperCase()
-                })).filter(s => s.id || s.name);
+            // 1. Pemprosesan Data Murid
+            globalStudents = rawStudents.map(s => ({
+                id: String(s.id || s['ID MURID'] || s.ID_PELAJAR || '').trim(),
+                name: String(s.name || s.NAMA || s.NAMA_MURID || '').trim().toUpperCase(),
+                class: String(s.class || s.KELAS || s.CLASS || '').trim().toUpperCase()
+            })).filter(s => s.id || s.name);
 
-                globalLogs = rawLogs.map(l => ({
+            // 2. Pemprosesan Data Log Kehadiran + Penormalan Tarikh (YYYY-MM-DD)
+            globalLogs = rawLogs.map(l => {
+                let rawDate = String(l.date || l.tarikh || l.TARIKH || '').trim();
+                let cleanDate = normalizeDateStr(rawDate); // Penormalan format tarikh
+
+                return {
                     id: String(l.id || l.ID_PELAJAR || l['ID MURID'] || '').trim(),
                     name: String(l.name || l.NAMA || '').trim().toUpperCase(),
                     class: String(l.class || l.KELAS || '').trim().toUpperCase(),
-                    date: String(l.date || l.TARIKH || '').trim(),
-                    time: String(l.time || l.MASA || '').trim(),
+                    date: cleanDate,
+                    time: String(l.time || l.masa || l.MASA || '').trim(),
                     status: String(l.status || 'HADIR').trim()
-                }));
+                };
+            });
 
-                syncDropdowns();
-                renderStudentsTable();
-                setupYearFilter();
-                processAttendanceAnalysis();
-                renderAbsentList();
-            }
-        } catch (err) {
-            console.error("Ralat membaca data dari Google Sheets:", err);
+            // 3. Kemaskini Semua Paparan UI
+            if (typeof syncDropdowns === 'function') syncDropdowns();
+            if (typeof renderStudentsTable === 'function') renderStudentsTable();
+            if (typeof setupYearFilter === 'function') setupYearFilter();
+            if (typeof processAttendanceAnalysis === 'function') processAttendanceAnalysis();
+            if (typeof renderAbsentList === 'function') renderAbsentList();
+
+            console.log("✅ Data berjaya dikemaskini. Jumlah Log:", globalLogs.length);
+        } else {
+            console.warn("Menerima respon tidak sah dari Google Sheets:", json);
+        }
+    } catch (err) {
+        console.error("Ralat membaca data dari Google Sheets:", err);
+    }
+}
+
+// --- FUNGSI HELPER: Penormalan Tarikh ke Format YYYY-MM-DD ---
+function normalizeDateStr(dateStr) {
+    if (!dateStr) return '';
+    
+    // Jika format DD/MM/YYYY (cth: 18/08/2026 atau 18/8/2026)
+    if (dateStr.includes('/')) {
+        const parts = dateStr.split('/');
+        if (parts.length === 3) {
+            const day = parts[0].padStart(2, '0');
+            const month = parts[1].padStart(2, '0');
+            const year = parts[2].length === 2 ? '20' + parts[2] : parts[2];
+            return `${year}-${month}-${day}`;
         }
     }
-
+    
+    // Jika format YYYY-MM-DD T... (ISO Date string)
+    if (dateStr.includes('T')) {
+        return dateStr.split('T')[0];
+    }
+    
+    return dateStr;
+}
     function startRealtimeSync() {
         fetchAllData();
         // Polling automatik setiap 15 saat
