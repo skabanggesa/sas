@@ -895,33 +895,25 @@ function updateQRNameDropdown() {
     const selectedClass = classSelect.value.trim().toUpperCase();
     nameSelect.innerHTML = '<option value="">-- Pilih Nama --</option>';
 
-    // Gunakan globalStudents dari fetchAllData()
-    let studentList = [];
-    if (typeof globalStudents !== 'undefined' && Array.isArray(globalStudents)) {
-        studentList = globalStudents;
-    } else if (typeof allStudents !== 'undefined' && Array.isArray(allStudents)) {
-        studentList = allStudents;
+    // Semak globalStudents yang diisi oleh fetchAllData()
+    if (typeof globalStudents === 'undefined' || !Array.isArray(globalStudents) || globalStudents.length === 0) {
+        console.warn("globalStudents masih kosong!");
+        return;
     }
 
-    console.log("Jumlah murid dalam simpanan:", studentList.length, "Kelas dipilih:", selectedClass);
+    if (!selectedClass) return;
 
-    if (!selectedClass || studentList.length === 0) return;
+    // Tapis murid berdasarkan s.class daripada globalStudents
+    const filtered = globalStudents.filter(s => s.class === selectedClass);
 
-    // Tapis mengikut kelas (menyemak s.class dan s.kelas)
-    const filtered = studentList.filter(s => {
-        const studentClass = (s.class || s.kelas || '').toString().trim().toUpperCase();
-        return studentClass === selectedClass;
-    });
+    console.log(`Menjumpai ${filtered.length} murid untuk kelas: ${selectedClass}`);
 
-    // Masukkan nama ke dalam dropdown
+    // Isi pilihan nama ke dropdown
     filtered.forEach(student => {
-        const studentId = student.id || student.idMurid || student.studentId;
-        const studentName = student.name || student.nama;
-
-        if (studentName) {
+        if (student.name) {
             const opt = document.createElement('option');
-            opt.value = studentId;
-            opt.textContent = studentName;
+            opt.value = student.id;   // Menggunakan s.id
+            opt.textContent = student.name; // Menggunakan s.name
             nameSelect.appendChild(opt);
         }
     });
