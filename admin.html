@@ -706,7 +706,17 @@ async function markAttendanceManual(studentId, studentName, studentClass) {
         }
 
         alert(`✅ Kehadiran ${studentName} direkodkan!`);
-        if (typeof fetchAllData === 'function') fetchAllData();
+
+        // 1. Tunggu (await) sehingga data terkini dari Google Sheets selesai dimuat turun sepenuhnya
+        if (typeof fetchAllData === 'function') {
+            await fetchAllData();
+        }
+
+        // 2. JIKA fungsi fetchAllData() anda TIDAK mengemaskini paparan secara automatik, 
+        // pastikan panggil fungsi render paparan anda di sini (pilih/uncomment yang berkaitan):
+        // if (typeof renderDashboard === 'function') renderDashboard();
+        // if (typeof processAttendanceAnalysis === 'function') processAttendanceAnalysis();
+
     } catch (err) {
         alert("❌ Ralat berlaku: " + err.message);
     }
