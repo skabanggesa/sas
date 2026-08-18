@@ -274,28 +274,9 @@
     </div>
 
 <div id="m-qr" class="section">
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px;">
-        <div class="card">
-            <div class="card-header"><h2>Gantian Kad Individu</h2></div>
-            <div style="display:flex; flex-direction:column; gap:12px;">
-                <label style="font-size:0.85rem;">Pilih Kelas & Nama:</label>
-                <select id="qrClassSelect" onchange="updateQRNameDropdown()">
-                    <option value="">-- Pilih Kelas --</option>
-                </select>
-                <select id="qrNameSelect">
-                    <option value="">-- Pilih Nama --</option>
-                </select>
-                <button class="btn btn-primary" style="justify-content:center; margin-top:10px;" onclick="printIndividual()">Jana & Cetak Kad</button>
-            </div>
-        </div>
-    </div>
-</div>
-            <div class="card">
-                <div class="card-header"><h2><div id="m-qr" class="section">
-    <!-- Grid Utama: Membahagikan paparan kepada 2 lajur -->
-    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:24px; margin-bottom: 24px;">
+    
+    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap:24px; margin-bottom:24px;">
         
-        <!-- Kad 1: Gantian Kad Individu -->
         <div class="card">
             <div class="card-header"><h2>Gantian Kad Individu</h2></div>
             <div style="display:flex; flex-direction:column; gap:12px;">
@@ -310,7 +291,6 @@
             </div>
         </div>
         
-        <!-- Kad 2: Cetakan Mengikut Kelas -->
         <div class="card">
             <div class="card-header"><h2>Cetakan Mengikut Kelas</h2></div>
             <div style="display:flex; flex-direction:column; gap:12px;">
@@ -321,32 +301,14 @@
             </div>
         </div>
 
-    </div> <!-- Penutup Grid Utama -->
-
-    <!-- Kad 3: Cetakan Pukal (Penuh Di Bawah) -->
-    <!-- Nota: Jika masih hilang, semak class 'admin-only' dalam CSS/JS anda -->
-    <div class="card admin-only" style="border-top: 4px solid var(--warning);">
+    </div> <div class="card admin-only" style="border-top: 4px solid var(--warning);">
         <div class="card-header"><h2>Cetakan Pukal (Satu Sekolah)</h2></div>
         <p style="font-size:0.9rem; color:var(--secondary);">Gunakan fungsi ini hanya untuk persediaan awal tahun atau cetakan besar-besaran.</p>
-        <button class="btn btn-primary" style="background:var(--warning); width:100%; justify-content:center" onclick="printBulk()">Jana Semua QR & Cetak</button>
+        <button class="btn btn-primary" style="background:var(--warning); width:100%; justify-content:center; border:none; padding:12px;" onclick="printBulk()">Jana Semua QR & Cetak</button>
     </div>
-</div></h2></div>
-                <div style="display:flex; flex-direction:column; gap:12px;">
-                    <label style="font-size:0.85rem;">Pilih Kelas:</label>
-                    <select id="printByClassSelect"></select>
-                    <div style="height:55px;"></div>
-                    <button class="btn btn-success" style="justify-content:center;" onclick="printClass()">Cetak Semua Dalam Kelas</button>
-                </div>
-            </div>
-        </div>
-        <div class="card admin-only" style="border-top: 4px solid var(--warning);">
-            <div class="card-header"><h2>Cetakan Pukal (Satu Sekolah)</h2></div>
-            <p style="font-size:0.9rem; color:var(--secondary);">Gunakan fungsi ini hanya untuk persediaan awal tahun atau cetakan besar-besaran.</p>
-            <button class="btn btn-primary" style="background:var(--warning); width:100%; justify-content:center" onclick="printBulk()">Jana Semua QR & Cetak</button>
-        </div>
-    </div>
-</div>
 
+</div>
+    
 <script>
     // --- KONFIGURASI GOOGLE SHEETS SAGE/SAS WEB APP ---
     const SAGE_URL = "https://script.google.com/macros/s/AKfycbwMcWyfOAkHawx3WjhAWQGjkB9MbbRcFkYTfDmXllz1mGKnUzB9Syi7ppsKPeDhFU2vqA/exec";
