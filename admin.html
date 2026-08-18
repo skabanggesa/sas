@@ -318,7 +318,6 @@
     let myChart = null;
     let userRole = 'admin'; 
     let syncInterval = null;
-    let allStudents = [];
 
     // --- API HELPER FOR GOOGLE APPS SCRIPT ---
     async function apiRequest(action, payload = {}) {
@@ -896,31 +895,28 @@ function updateQRNameDropdown() {
     const selectedClass = classSelect.value.trim().toUpperCase();
     nameSelect.innerHTML = '<option value="">-- Pilih Nama --</option>';
 
-    // 1. Dapatkan senarai murid dari pembolehubah sedia ada
+    // Gunakan globalStudents dari fetchAllData()
     let studentList = [];
-    if (typeof allStudents !== 'undefined' && Array.isArray(allStudents) && allStudents.length > 0) {
+    if (typeof globalStudents !== 'undefined' && Array.isArray(globalStudents)) {
+        studentList = globalStudents;
+    } else if (typeof allStudents !== 'undefined' && Array.isArray(allStudents)) {
         studentList = allStudents;
-    } else if (typeof activeStudents !== 'undefined' && Array.isArray(activeStudents) && activeStudents.length > 0) {
-        studentList = activeStudents;
-    } else if (typeof masterStudents !== 'undefined' && Array.isArray(masterStudents) && masterStudents.length > 0) {
-        studentList = masterStudents;
     }
 
-    // Semak di Console F12 sekiranya data masih kosong
     console.log("Jumlah murid dalam simpanan:", studentList.length, "Kelas dipilih:", selectedClass);
 
     if (!selectedClass || studentList.length === 0) return;
 
-    // 2. Tapis murid dengan menyemak semua variasi kunci kelas
+    // Tapis mengikut kelas (menyemak s.class dan s.kelas)
     const filtered = studentList.filter(s => {
-        const studentClass = (s.kelas || s.class || s.KELAS || s['KELAS'] || '').toString().trim().toUpperCase();
+        const studentClass = (s.class || s.kelas || '').toString().trim().toUpperCase();
         return studentClass === selectedClass;
     });
 
-    // 3. Masukkan nama ke dropdown dengan menyemak semua variasi kunci nama & ID
+    // Masukkan nama ke dalam dropdown
     filtered.forEach(student => {
-        const studentId = student.idMurid || student.studentId || student.id || student.ID || student['ID MURID'] || student['ID_PELAJAR'];
-        const studentName = student.nama || student.name || student.NAMA || student['NAMA MURID'] || student['NAMA'];
+        const studentId = student.id || student.idMurid || student.studentId;
+        const studentName = student.name || student.nama;
 
         if (studentName) {
             const opt = document.createElement('option');
