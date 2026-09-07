@@ -436,6 +436,15 @@ function normalizeDateStr(dateStr) {
     }
     return str;
 }
+
+     function startRealtimeSync() {
+        fetchAllData();
+
+        // Polling automatik setiap 15 saat
+        if (!syncInterval) {
+            syncInterval = setInterval(fetchAllData, 15000);
+        }
+    } 
     
     // --- 3. DATA MANAGEMENT ---
     async function importCSVToSheet(event) {
