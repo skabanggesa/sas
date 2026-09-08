@@ -901,23 +901,49 @@ async function markAttendanceManual(studentId, studentName, studentClass) {
     }
 
     function renderReport(logsToShow) {
-        const reportBody = document.getElementById('reportBody');
-        if (!reportBody) return;
-        
-        if (!logsToShow || logsToShow.length === 0) {
-            reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran.</td></tr>`;
-            return;
-        }
+    const reportBody = document.getElementById('reportBody') || document.getElementById('reportTableBody');
+    if (!reportBody) return;
 
-        reportBody.innerHTML = logsToShow.map(l => `
-            <tr>
-                <td>${l.date || '-'}</td>
-                <td><span class="badge badge-blue">${l.time || '-'}</span></td>
-                <td><b>${l.name || '-'}</b></td>
-                <td>${l.class || '-'}</td>
-            </tr>
-        `).join('');
+    if (!logsToShow || logsToShow.length === 0) {
+        reportBody.innerHTML = `<tr><td colspan="4" style="text-align:center; color:var(--secondary); font-weight:bold; padding:20px;">Tiada rekod kehadiran.</td></tr>`;
+        return;
     }
+
+    // 1. Cipta peta carian murid mengikut ID dari globalStudents
+    const studentMap = {};
+    if (Array.isArray(globalStudents)) {
+        globalStudents.forEach(s => {
+            const sId = String(s.id || s["ID MURID"] || s.ID || '').trim();
+            if (sId) {
+                studentMap[sId] = s;
+            }
+        });
+    }
+
+    // 2. Bina baris jadual dengan padanan ID
+    reportBody.innerHTML = logsToShow.map(l => {
+        const logId = String(l.id || l.ID || l["ID MURID"] || '').trim();
+        
+        // Cari profil murid dari master_data jika log tiada nama
+        const studentInfo = studentMap[logId] || {};
+
+        const dateStr  = normalizeDateStr(l.date || l.tarikh || l["TARIKH"] || '');
+        const timeStr  = l.time || l.masa || l["MASA"] || '-';
+        
+        // Ambil nama dari log, jika tiada ambil dari master_data
+        const nameStr  = l.name || l.nama || l["NAMA"] || studentInfo.name || studentInfo.nama || studentInfo["NAMA"] || 'NAMA TIADA (ID: ' + logId + ')';
+        const classStr = l.class || l.kelas || l["KELAS"] || studentInfo.class || studentInfo.kelas || studentInfo["KELAS"] || '-';
+
+        return `
+            <tr>
+                <td>${dateStr}</td>
+                <td><span class="badge badge-blue">${timeStr}</span></td>
+                <td><b>${nameStr}</b></td>
+                <td>${classStr}</td>
+            </tr>
+        `;
+    }).join('');
+}
 
     function exportExcel() {
         const mode = document.getElementById('analysisMode').value;
