@@ -814,57 +814,66 @@ async function markAttendanceManual(studentId, studentName, studentClass) {
     }
 
     function processAttendanceAnalysis() {
-        if (!globalLogs) return; 
+    if (!globalLogs) return; 
 
-        const modeEl = document.getElementById('analysisMode');
-        const yearFilterEl = document.getElementById('yearFilter');
-        const monthFilterEl = document.getElementById('monthFilter');
-        const dateFilterEl = document.getElementById('dateFilter');
-        
-        const mode = modeEl ? modeEl.value : 'daily';
-        const selectedYear = yearFilterEl && yearFilterEl.value ? yearFilterEl.value : new Date().getFullYear().toString();
-        const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
-        
-        let selectedDailyDate = new Date().toISOString().split('T')[0]; 
-if (dateFilterEl && dateFilterEl.value) {
-    selectedDailyDate = dateFilterEl.value; // Nilai daripad <input type="date"> memang YYYY-MM-DD
-}
-
-        let totalExpected = (globalStudents && globalStudents.length > 0) ? globalStudents.length : 242; 
-        let filteredLogs = [];
-
-        if (mode === 'daily') {
-            filteredLogs = globalLogs.filter(l => l && l.date === selectedDailyDate);
-            updateChartUI(filteredLogs.length, totalExpected - filteredLogs.length);
-            renderClassSummary(selectedDailyDate);
-
-        } else if (mode === 'monthly') {
-            filteredLogs = globalLogs.filter(l => {
-                if (!l || !l.date) return false;
-                const parts = l.date.split('/'); 
-                return parts[1] === selectedMonth && parts[2] === selectedYear;
-            });
-            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
-            updateChartUI(filteredLogs.length, (totalExpected * (uniqueDays || 1)) - filteredLogs.length);
-            renderClassSummary();
-
-        } else if (mode === 'history') {
-            filteredLogs = globalLogs.filter(l => l && l.date && l.date.split('/')[2] === selectedYear);
-            const uniqueDays = [...new Set(filteredLogs.map(l => l.date))].length;
-            updateChartUI(filteredLogs.length, (totalExpected * (uniqueDays || 1)) - filteredLogs.length);
-            renderClassSummary();
-        }
-
-        const sortedLogs = filteredLogs.sort((a, b) => {
-            const dateA = a.date || ''; const dateB = b.date || '';
-            if (dateA !== dateB) return dateB.localeCompare(dateA);
-            const timeA = a.time || ''; const timeB = b.time || '';
-            return timeB.localeCompare(timeA);
-        });
-        
-        renderReport(sortedLogs);
+    const modeEl = document.getElementById('analysisMode');
+    const yearFilterEl = document.getElementById('yearFilter');
+    const monthFilterEl = document.getElementById('monthFilter');
+    const dateFilterEl = document.getElementById('dateFilter');
+    
+    const mode = modeEl ? modeEl.value : 'daily';
+    const selectedYear = yearFilterEl && yearFilterEl.value ? yearFilterEl.value : new Date().getFullYear().toString();
+    const selectedMonth = monthFilterEl ? monthFilterEl.value : String(new Date().getMonth() + 1).padStart(2, '0');
+    
+    let selectedDailyDate = new Date().toISOString().split('T')[0]; 
+    if (dateFilterEl && dateFilterEl.value) {
+        selectedDailyDate = dateFilterEl.value;
     }
 
+    // Penormalan: Tukar YYYY-MM-DD kepada DD/MM/YYYY untuk perbandingan tepat
+    const targetDailyDMY = normalizeDateStr(selectedDailyDate);
+
+    let totalExpected = (globalStudents && globalStudents.length > 0) ? globalStudents.length : 242; 
+    let filteredLogs = [];
+
+    if (mode === 'daily') {
+        filteredLogs = globalLogs.filter(l => l && l.date && normalizeDateStr(l.date) === targetDailyDMY);
+        updateChartUI(filteredLogs.length, Math.max(0, totalExpected - filteredLogs.length));
+        renderClassSummary(targetDailyDMY);
+
+    } else if (mode === 'monthly') {
+        filteredLogs = globalLogs.filter(l => {
+            if (!l || !l.date) return false;
+            const normDate = normalizeDateStr(l.date);
+            const parts = normDate.split('/'); 
+            return parts.length === 3 && parts[1] === selectedMonth && parts[2] === selectedYear;
+        });
+        const uniqueDays = [...new Set(filteredLogs.map(l => normalizeDateStr(l.date)))].length;
+        updateChartUI(filteredLogs.length, Math.max(0, (totalExpected * (uniqueDays || 1)) - filteredLogs.length));
+        renderClassSummary();
+
+    } else if (mode === 'history') {
+        filteredLogs = globalLogs.filter(l => {
+            if (!l || !l.date) return false;
+            const normDate = normalizeDateStr(l.date);
+            const parts = normDate.split('/');
+            return parts.length === 3 && parts[2] === selectedYear;
+        });
+        const uniqueDays = [...new Set(filteredLogs.map(l => normalizeDateStr(l.date)))].length;
+        updateChartUI(filteredLogs.length, Math.max(0, (totalExpected * (uniqueDays || 1)) - filteredLogs.length));
+        renderClassSummary();
+    }
+
+    const sortedLogs = filteredLogs.sort((a, b) => {
+        const dateA = a.date || ''; const dateB = b.date || '';
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        const timeA = a.time || ''; const timeB = b.time || '';
+        return timeB.localeCompare(timeA);
+    });
+    
+    renderReport(sortedLogs);
+}
+    
     function updateChartUI(present, absent) {
         const chartEl = document.getElementById('attendanceChart');
         if (!chartEl) return;
